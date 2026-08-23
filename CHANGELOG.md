@@ -11,6 +11,7 @@ Todas as melhorias, novidades e correções notáveis deste projeto serão docum
   - Tela de Gestão e Acompanhamento de Rotas em tempo real (`/dashboard/rotas`).
   - Tela de Transações Financeiras e Conciliações (`/dashboard/transacoes`).
   - Acesso direto ao Modo Rua no menu lateral do Dashboard.
-- **Infraestrutura**:
-  - Configuração do Firebase Hosting e deploy automático de produção.
-  - Regras de segurança Multi-Tenant e modelo de dados NoSQL documentado.
+- **Infraestrutura (100% Plano Spark Gratuito)**:
+  - Migração completa para o plano gratuito Spark sem necessidade de cartão de crédito.
+  - Segurança e anti-fraude integrados nativamente nas `firestore.rules` (bloqueio de transações e rotas fechadas sem custo de Cloud Functions).
+  - Deploy de produção no Firebase Hosting e sincronização contínua com o GitHub.

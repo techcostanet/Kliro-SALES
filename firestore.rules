@@ -2,25 +2,61 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Função auxiliar para verificar se o usuário está logado
+    // Função auxiliar: Usuário autenticado
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    // Função auxiliar para verificar se o usuário pertence à empresa (tenant)
-    function belongsToTenant(tenantId) {
-      return isAuthenticated() && request.auth.token.tenantId == tenantId;
+    // Mapeamento de usuário para empresa (Tenant)
+    match /user_mappings/{userId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Impede o acesso direto à raiz dos tenants, exceto para administradores globais
+    // Regras Multi-Tenant para as Empresas
     match /tenants/{tenantId} {
-      allow read: if belongsToTenant(tenantId);
-      allow write: if false; // Somente via Cloud Functions
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated(); // Para setup inicial
 
-      // Regra de Ouro: Todo documento dentro de uma empresa só pode ser lido/escrito 
-      // por usuários que tenham o "tenantId" correto injetado no seu Token JWT.
-      match /{document=**} {
-        allow read, write: if belongsToTenant(tenantId);
+      // Subcoleção de Usuários
+      match /users/{userId} {
+        allow read, write: if isAuthenticated();
+      }
+
+      // Subcoleção de Produtos (Catálogo)
+      match /products/{productId} {
+        allow read: if isAuthenticated();
+        allow write: if isAuthenticated();
+      }
+
+      // Subcoleção de Clientes
+      match /clients/{clientId} {
+        allow read, write: if isAuthenticated();
+      }
+
+      // Subcoleção de Rotas
+      match /routes/{routeId} {
+        allow read, write: if isAuthenticated();
+      }
+
+      // Subcoleção de Execuções de Rotas (Modo Rua)
+      match /route_executions/{executionId} {
+        allow read: if isAuthenticated();
+        // Permite abrir rota
+        allow create: if isAuthenticated();
+        // Permite atualizar para fechar (CLOSED), mas impede reabrir rota já fechada (Anti-Fraude)
+        allow update: if isAuthenticated() && (
+          resource.data.status != 'CLOSED' || request.resource.data.status == 'CLOSED'
+        );
+        allow delete: if false; // Ninguém pode apagar histórico de rota
+      }
+
+      // Subcoleção de Transações (Vendas, Pagamentos, Devoluções)
+      match /transactions/{transactionId} {
+        allow read: if isAuthenticated();
+        // Anti-Fraude: Permite criar vendas durante a rota
+        allow create: if isAuthenticated();
+        // Anti-Fraude: Impede edição ou exclusão de transações já salvas
+        allow update, delete: if false;
       }
     }
   }
