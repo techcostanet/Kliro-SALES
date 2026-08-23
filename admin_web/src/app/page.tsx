@@ -89,6 +89,15 @@ export default function LoginPage() {
             {loading ? "Entrando..." : "Acessar Painel"}
           </button>
         </form>
+
+        <div className="mt-6 pt-6 border-t border-brand-blue/30 text-center">
+          <a
+            href="/saas-admin"
+            className="text-xs text-brand-offwhite/50 hover:text-brand-gold font-medium transition"
+          >
+            ⚙️ Acesso Master: Portal de Gestão do SaaS →
+          </a>
+        </div>
       </div>
     </div>
   );

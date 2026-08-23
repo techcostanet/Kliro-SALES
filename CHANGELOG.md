@@ -7,7 +7,12 @@ Todas as melhorias, novidades e correções notáveis deste projeto serão docum
 - **Fase 4: Modo Rua Mobile (PWA & Flutter)**:
   - Interface otimizada para smartphones em `/rua` com fluxo completo de visitas, pedidos com catálogo/carrinho, formas de pagamento (Pix, Dinheiro, A Prazo) e fechamento anti-fraude com hash de auditoria.
   - Código-fonte nativo Flutter estruturado em `mobile/` (`pubspec.yaml`, `main.dart`, `firestore_service.dart`, `modo_rua_screen.dart`).
-- **Painel Admin**:
+- **Fase 6: Portal Master de Gestão do SaaS (Super Admin)**:
+  - Portal de Administração Central em `/saas-admin` com identidade visual clean e moderna (Slate/Indigo/Emerald), totalmente independente das cores dos clientes.
+  - Dashboard Executivo com indicadores de MRR, ARR, GMV transacionado e licenças ativas de vendedores.
+  - Gestão de Clientes Multi-Tenant em `/saas-admin/clientes` com a LUKE Brasil como cliente 01 e modal de provisionamento de novas empresas com 1 clique.
+  - Gestão de Planos & Preços e Simulador Comercial em `/saas-admin/planos`.
+- **Painel Admin do Cliente (LUKE)**:
   - Tela de Gestão e Acompanhamento de Rotas em tempo real (`/dashboard/rotas`).
   - Tela de Transações Financeiras e Conciliações (`/dashboard/transacoes`).
   - Acesso direto ao Modo Rua no menu lateral do Dashboard.
