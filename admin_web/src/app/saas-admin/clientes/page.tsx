@@ -212,7 +212,7 @@ export default function SaasAdminClientesPage() {
 
                   <td className="p-4 text-right space-x-2">
                     <Link
-                      href="/dashboard"
+                      href={tenant.id === "tenant_luke_001" ? "/luke" : `/${tenant.id}`}
                       className="inline-flex items-center space-x-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold transition border border-slate-700"
                       title="Entrar no Painel do Cliente"
                     >

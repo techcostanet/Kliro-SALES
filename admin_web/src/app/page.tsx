@@ -20,7 +20,7 @@ export default function LoginPage() {
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      router.push("/dashboard");
+      router.push("/luke");
     } catch (err: any) {
       setError("Credenciais inválidas. Verifique seu e-mail e senha.");
     } finally {
@@ -90,12 +90,24 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-6 pt-6 border-t border-brand-blue/30 text-center">
+        <div className="mt-6 pt-6 border-t border-brand-blue/30 flex flex-col items-center space-y-2 text-xs">
+          <a
+            href="/luke"
+            className="text-brand-gold font-bold hover:underline"
+          >
+            🦁 Entrar no Painel LUKE Brasil (/luke) →
+          </a>
+          <a
+            href="/luke/rua"
+            className="text-brand-offwhite/60 hover:text-brand-gold font-medium"
+          >
+            📱 Abrir Modo Rua da LUKE (/luke/rua) →
+          </a>
           <a
             href="/saas-admin"
-            className="text-xs text-brand-offwhite/50 hover:text-brand-gold font-medium transition"
+            className="text-indigo-400 hover:text-indigo-300 font-semibold pt-2"
           >
-            ⚙️ Acesso Master: Portal de Gestão do SaaS →
+            ⚙️ Portal Master SaaS Super Admin (/saas-admin) →
           </a>
         </div>
       </div>

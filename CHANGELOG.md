@@ -7,6 +7,11 @@ Todas as melhorias, novidades e correções notáveis deste projeto serão docum
 - **Fase 4: Modo Rua Mobile (PWA & Flutter)**:
   - Interface otimizada para smartphones em `/rua` com fluxo completo de visitas, pedidos com catálogo/carrinho, formas de pagamento (Pix, Dinheiro, A Prazo) e fechamento anti-fraude com hash de auditoria.
   - Código-fonte nativo Flutter estruturado em `mobile/` (`pubspec.yaml`, `main.dart`, `firestore_service.dart`, `modo_rua_screen.dart`).
+- **Fase 7: Roteamento Dinâmico Multi-Tenant (`/[tenant]` e `/[tenant]/rua`)**:
+  - Arquitetura de URLs personalizadas por empresa cliente (White-Label):
+    - Cliente LUKE: `https://kliro-sales.web.app/luke` (Painel) e `https://kliro-sales.web.app/luke/rua` (Modo Rua).
+    - Sub-rotas dinâmicas: `/luke/produtos`, `/luke/vendedores`, `/luke/rotas`, `/luke/transacoes`.
+    - Portal SaaS Super Admin acessível em `https://kliro-sales.web.app/saas-admin`.
 - **Fase 6: Portal Master de Gestão do SaaS (Super Admin)**:
   - Portal de Administração Central em `/saas-admin` com identidade visual clean e moderna (Slate/Indigo/Emerald), totalmente independente das cores dos clientes.
   - Dashboard Executivo com indicadores de MRR, ARR, GMV transacionado e licenças ativas de vendedores.

@@ -105,10 +105,10 @@ export default function SaasAdminLayout({
             </div>
             <p className="text-xs font-semibold text-slate-200">LUKE Brasil Alimentos</p>
             <Link
-              href="/dashboard"
+              href="/luke"
               className="flex items-center justify-center space-x-1.5 w-full py-1.5 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-bold transition"
             >
-              <span>Abrir Painel LUKE</span>
+              <span>Abrir /luke</span>
               <ExternalLink size={12} />
             </Link>
           </div>
