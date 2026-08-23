@@ -4,7 +4,13 @@ Todas as melhorias, novidades e correções notáveis deste projeto serão docum
 
 ## [Unreleased]
 ### Added
-- Inicialização do projeto Next.js (Admin Web) conectado ao Firestore.
-- Configuração de Cloud Functions para fechamento de rotas e consolidação financeira.
-- Criação de telas do Dashboard (Geral, Produtos, Vendedores).
-- Implementação da regra de Multi-Tenant com subcoleções e `firestore.rules`.
+- **Fase 4: Modo Rua Mobile (PWA & Flutter)**:
+  - Interface otimizada para smartphones em `/rua` com fluxo completo de visitas, pedidos com catálogo/carrinho, formas de pagamento (Pix, Dinheiro, A Prazo) e fechamento anti-fraude com hash de auditoria.
+  - Código-fonte nativo Flutter estruturado em `mobile/` (`pubspec.yaml`, `main.dart`, `firestore_service.dart`, `modo_rua_screen.dart`).
+- **Painel Admin**:
+  - Tela de Gestão e Acompanhamento de Rotas em tempo real (`/dashboard/rotas`).
+  - Tela de Transações Financeiras e Conciliações (`/dashboard/transacoes`).
+  - Acesso direto ao Modo Rua no menu lateral do Dashboard.
+- **Infraestrutura**:
+  - Configuração do Firebase Hosting e deploy automático de produção.
+  - Regras de segurança Multi-Tenant e modelo de dados NoSQL documentado.

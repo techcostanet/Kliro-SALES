@@ -69,6 +69,16 @@ export default function DashboardLayout({
             <Package size={20} />
             <span className="font-medium">Produtos</span>
           </Link>
+          
+          <div className="pt-4 border-t border-brand-blue/20">
+            <Link
+              href="/rua"
+              className="flex items-center space-x-3 px-4 py-3 bg-brand-gold/15 text-brand-gold hover:bg-brand-gold/25 border border-brand-gold/30 rounded-lg font-bold transition shadow-md"
+            >
+              <span className="text-lg">📱</span>
+              <span>Modo Rua (Vendedor)</span>
+            </Link>
+          </div>
         </nav>
 
         <div className="p-4 border-t border-brand-blue/30">
