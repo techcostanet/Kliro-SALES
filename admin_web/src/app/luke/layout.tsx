@@ -80,21 +80,13 @@ export default function LukeDashboardLayout({
             })}
 
             {/* Atalho: Modo Rua */}
-            <div className="pt-4 border-t border-brand-blue/20 space-y-2">
+            <div className="pt-4 border-t border-brand-blue/20">
               <Link
                 href="/luke/rua"
                 className="flex items-center space-x-3 px-4 py-3 bg-brand-gold/15 text-brand-gold hover:bg-brand-gold/25 border border-brand-gold/30 rounded-lg font-bold transition shadow-md text-sm"
               >
                 <span className="text-lg">📱</span>
                 <span>Modo Rua (LUKE)</span>
-              </Link>
-
-              <Link
-                href="/saas-admin"
-                className="flex items-center space-x-3 px-4 py-2.5 text-xs text-brand-offwhite/50 hover:text-brand-offwhite hover:bg-brand-blue/10 rounded-lg transition"
-              >
-                <span>⚙️</span>
-                <span>Voltar ao SaaS Master</span>
               </Link>
             </div>
           </nav>
