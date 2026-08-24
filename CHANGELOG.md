@@ -4,6 +4,18 @@ Todas as melhorias, novidades e correções notáveis deste projeto serão docum
 
 ## [Unreleased]
 ### Added
+- **Fase 9: Métodos de Pagamento, 2 Planos Editáveis (Basic/Premium) & Credenciais Master**:
+  - **Rebranding Master**: Atualização da assinatura corporativa para **Tech Costa Systems**.
+  - **Gestão de Métodos de Pagamento (`/saas-admin/pagamentos`)**:
+    - Suporte a configuração de **Pix Instantâneo**, **Boleto Bancário** e **Cartão de Crédito**.
+    - Configurações completas de gateways (Asaas, Mercado Pago, Efí, Stripe), chaves de API, webhooks, regras de juros/multa e limites de parcelamento.
+  - **Planos Comerciais Clean & Editáveis (`/saas-admin/planos`)**:
+    - Estruturação em 2 planos objetivos: **Basic** e **Premium**.
+    - Modal de edição completo para alterar preços por vendedor, textos, selos e benefícios inclusos em cada plano.
+    - Remoção do bloco de simulação de preços conforme especificação.
+  - **Autenticação do Administrador Master**:
+    - Criação e ativação da conta Master `contato@techcosta.net` com senha `T3chCost@10`.
+    - Tela de login dedicada `/saas-admin/login` e redirecionamento inteligente no login principal.
 - **Fase 8: Redesign Clean/Claro do Super Admin & CRUD Completo de Clientes**:
   - **Identidade Visual Clean & Clara**: Redesign completo do portal `/saas-admin`, `/saas-admin/clientes` e `/saas-admin/planos` utilizando paleta ultra-limpa (Slate/White/Indigo/Emerald).
   - **Isolamento de Acesso**: Remoção completa de atalhos e links para acesso ao sistema interno dos clientes a partir do painel do SaaS Master.

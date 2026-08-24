@@ -7,8 +7,8 @@ import {
   LayoutDashboard,
   CreditCard,
   Shield,
-  Layers,
-  Sparkles,
+  Wallet,
+  Settings,
 } from "lucide-react";
 
 export default function SaasAdminLayout({
@@ -36,6 +36,12 @@ export default function SaasAdminLayout({
       href: "/saas-admin/planos",
       icon: CreditCard,
       active: pathname === "/saas-admin/planos",
+    },
+    {
+      label: "Métodos de Pagamento",
+      href: "/saas-admin/pagamentos",
+      icon: Wallet,
+      active: pathname === "/saas-admin/pagamentos",
     },
   ];
 
@@ -114,7 +120,7 @@ export default function SaasAdminLayout({
           <div className="flex items-center space-x-3">
             <div className="text-right hidden sm:block">
               <p className="text-xs font-bold text-slate-800">Administrador Master</p>
-              <p className="text-[11px] text-slate-400">TechCosta Solutions</p>
+              <p className="text-[11px] text-slate-400">Tech Costa Systems</p>
             </div>
             <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-sm border border-indigo-200">
               TC

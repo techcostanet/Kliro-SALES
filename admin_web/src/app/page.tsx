@@ -4,14 +4,27 @@ import { useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
-import { Lock, Mail } from "lucide-react";
+import { Lock, Mail, Shield, Building2, ArrowRight } from "lucide-react";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [accessMode, setAccessMode] = useState<"MASTER" | "CLIENT">("MASTER");
+  const [email, setEmail] = useState("contato@techcosta.net");
+  const [password, setPassword] = useState("T3chCost@10");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+
+  const handleSelectMode = (mode: "MASTER" | "CLIENT") => {
+    setAccessMode(mode);
+    setError("");
+    if (mode === "MASTER") {
+      setEmail("contato@techcosta.net");
+      setPassword("T3chCost@10");
+    } else {
+      setEmail("admin@luke.com");
+      setPassword("admin123");
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,7 +33,11 @@ export default function LoginPage() {
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      router.push("/luke");
+      if (email.toLowerCase().includes("techcosta.net") || accessMode === "MASTER") {
+        router.push("/saas-admin");
+      } else {
+        router.push("/luke");
+      }
     } catch (err: any) {
       setError("Credenciais inválidas. Verifique seu e-mail e senha.");
     } finally {
@@ -29,52 +46,84 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-brand-black px-4">
-      <div className="w-full max-w-md bg-brand-graphite rounded-xl shadow-2xl p-8 border border-brand-blue/30">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-brand-gold">Kliro-SALES</h1>
-          <p className="text-brand-offwhite/70 mt-2">Painel Executivo</p>
+    <div className="min-h-screen flex items-center justify-center bg-slate-900 px-4 font-sans">
+      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-8 border border-slate-200 space-y-6">
+        {/* Logo & Header */}
+        <div className="text-center space-y-2">
+          <div className="w-12 h-12 rounded-2xl bg-indigo-600 flex items-center justify-center font-black text-white text-xl mx-auto shadow-md shadow-indigo-500/20">
+            K
+          </div>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Kliro-SALES</h1>
+          <p className="text-xs text-slate-500 font-medium">
+            Plataforma Comercial Multi-Tenant • Tech Costa Systems
+          </p>
+        </div>
+
+        {/* Seletor de Perfil / Modo de Acesso */}
+        <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-2xl border border-slate-200">
+          <button
+            type="button"
+            onClick={() => handleSelectMode("MASTER")}
+            className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 transition ${
+              accessMode === "MASTER"
+                ? "bg-white text-indigo-700 shadow-xs border border-slate-200"
+                : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <Shield size={14} />
+            <span>SaaS Master</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleSelectMode("CLIENT")}
+            className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 transition ${
+              accessMode === "CLIENT"
+                ? "bg-white text-slate-900 shadow-xs border border-slate-200"
+                : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <Building2 size={14} />
+            <span>Cliente LUKE</span>
+          </button>
         </div>
 
         {error && (
-          <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-3 rounded-lg mb-6 text-sm text-center">
+          <div className="bg-rose-50 border border-rose-200 text-rose-700 p-3 rounded-xl text-xs text-center font-semibold">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-6">
+        {/* Formulário */}
+        <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-brand-offwhite mb-2">
-              E-mail corporativo
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
+              E-mail de Acesso
             </label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Mail className="h-5 w-5 text-brand-offwhite/40" />
-              </div>
+              <Mail className="h-4 w-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" />
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="block w-full pl-10 pr-3 py-3 bg-brand-black border border-brand-blue/50 rounded-lg text-brand-offwhite placeholder-brand-offwhite/30 focus:outline-none focus:ring-2 focus:ring-brand-gold focus:border-transparent transition"
-                placeholder="voce@empresa.com"
+                className="block w-full pl-10 pr-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-xs"
+                placeholder="seu-email@dominio.com"
                 required
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-brand-offwhite mb-2">
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
               Senha
             </label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Lock className="h-5 w-5 text-brand-offwhite/40" />
-              </div>
+              <Lock className="h-4 w-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" />
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="block w-full pl-10 pr-3 py-3 bg-brand-black border border-brand-blue/50 rounded-lg text-brand-offwhite placeholder-brand-offwhite/30 focus:outline-none focus:ring-2 focus:ring-brand-gold focus:border-transparent transition"
+                className="block w-full pl-10 pr-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-xs"
                 placeholder="••••••••"
                 required
               />
@@ -84,31 +133,27 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-bold text-brand-black bg-brand-gold hover:bg-yellow-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-gold disabled:opacity-50 disabled:cursor-not-allowed transition"
+            className={`w-full flex justify-center items-center space-x-2 py-3 px-4 rounded-xl text-sm font-bold text-white transition shadow-sm ${
+              accessMode === "MASTER"
+                ? "bg-indigo-600 hover:bg-indigo-700"
+                : "bg-slate-900 hover:bg-black"
+            }`}
           >
-            {loading ? "Entrando..." : "Acessar Painel"}
+            <span>
+              {loading
+                ? "Autenticando..."
+                : accessMode === "MASTER"
+                ? "Entrar no Painel Master SaaS"
+                : "Entrar no Painel da Empresa"}
+            </span>
+            <ArrowRight size={16} />
           </button>
         </form>
 
-        <div className="mt-6 pt-6 border-t border-brand-blue/30 flex flex-col items-center space-y-2 text-xs">
-          <a
-            href="/luke"
-            className="text-brand-gold font-bold hover:underline"
-          >
-            🦁 Entrar no Painel LUKE Brasil (/luke) →
-          </a>
-          <a
-            href="/luke/rua"
-            className="text-brand-offwhite/60 hover:text-brand-gold font-medium"
-          >
-            📱 Abrir Modo Rua da LUKE (/luke/rua) →
-          </a>
-          <a
-            href="/saas-admin"
-            className="text-indigo-400 hover:text-indigo-300 font-semibold pt-2"
-          >
-            ⚙️ Portal Master SaaS Super Admin (/saas-admin) →
-          </a>
+        <div className="pt-3 border-t border-slate-100 text-center">
+          <p className="text-[11px] text-slate-400">
+            Tech Costa Systems • Todos os direitos reservados
+          </p>
         </div>
       </div>
     </div>
