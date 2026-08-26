@@ -15,7 +15,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 1,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-002",
@@ -33,7 +35,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 2,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-003",
@@ -51,7 +55,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 3,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-004",
@@ -69,7 +75,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 4,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-005",
@@ -87,7 +95,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 5,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-006",
@@ -105,7 +115,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 6,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-007",
@@ -123,7 +135,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 7,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-008",
@@ -141,7 +155,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 8,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-009",
@@ -159,7 +175,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 9,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-010",
@@ -177,7 +195,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 10,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1608248597359-0a6a24177d61?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-011",
@@ -195,7 +215,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 11,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1621607512214-68297480165e?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-012",
@@ -213,7 +235,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 12,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1621607512214-68297480165e?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-013",
@@ -231,7 +255,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 13,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1621607512214-68297480165e?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-014",
@@ -249,7 +275,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 14,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1608248597359-0a6a24177d61?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-015",
@@ -267,7 +295,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 15,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1608248597359-0a6a24177d61?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-016",
@@ -285,7 +315,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 16,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1535585209827-a15fcdbc4c2d?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-017",
@@ -303,7 +335,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 17,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1621607512214-68297480165e?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-018",
@@ -321,7 +355,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 18,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1590439471364-192aa70c0b53?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-019",
@@ -339,7 +375,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 19,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1590439471364-192aa70c0b53?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-020",
@@ -357,7 +395,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 20,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1590439471364-192aa70c0b53?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-021",
@@ -375,7 +415,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 21,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1590439471364-192aa70c0b53?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-022",
@@ -393,7 +435,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 22,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1621607512214-68297480165e?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-023",
@@ -411,7 +455,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 23,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1621607512214-68297480165e?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-024",
@@ -429,7 +475,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 24,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1621607512214-68297480165e?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-025",
@@ -447,7 +495,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 25,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1592945403244-b3fbafd7f539?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-026",
@@ -465,7 +515,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 26,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1592945403244-b3fbafd7f539?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-027",
@@ -483,7 +535,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 27,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1527799820374-dcf8d9d4a388?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-028",
@@ -501,7 +555,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 28,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1527799820374-dcf8d9d4a388?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-029",
@@ -519,7 +575,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 29,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-030",
@@ -537,7 +595,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 30,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-031",
@@ -555,7 +615,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 31,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1535585209827-a15fcdbc4c2d?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-032",
@@ -573,7 +635,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 32,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1535585209827-a15fcdbc4c2d?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-033",
@@ -591,7 +655,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 33,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1535585209827-a15fcdbc4c2d?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-034",
@@ -609,7 +675,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 34,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1608248597359-0a6a24177d61?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-035",
@@ -627,7 +695,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 35,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1608248597359-0a6a24177d61?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-036",
@@ -645,7 +715,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 36,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1608248597359-0a6a24177d61?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-037",
@@ -663,7 +735,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 37,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1608248597359-0a6a24177d61?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-038",
@@ -681,7 +755,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 38,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1556228720-195a672e8a03?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-039",
@@ -699,7 +775,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 39,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1556228720-195a672e8a03?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-040",
@@ -717,7 +795,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 40,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1556228720-195a672e8a03?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-041",
@@ -735,7 +815,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 41,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1556228720-195a672e8a03?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-042",
@@ -753,7 +835,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 42,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1592945403244-b3fbafd7f539?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-043",
@@ -771,7 +855,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 43,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1592945403244-b3fbafd7f539?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-044",
@@ -789,7 +875,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 44,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1527799820374-dcf8d9d4a388?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-045",
@@ -807,7 +895,9 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 45,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1527799820374-dcf8d9d4a388?w=300&auto=format&fit=crop&q=80"
   },
   {
     "id": "PROD-046",
@@ -825,6 +915,8 @@
     "blockedForLoading": false,
     "blockingReason": "",
     "order": 46,
-    "active": true
+    "active": true,
+    "brand": "LUKE Brasil",
+    "imageUrl": "https://images.unsplash.com/photo-1527799820374-dcf8d9d4a388?w=300&auto=format&fit=crop&q=80"
   }
 ]

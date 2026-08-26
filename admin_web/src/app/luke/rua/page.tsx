@@ -365,18 +365,25 @@ export default function LukeModoRuaPage() {
                             : "bg-brand-black/60 border-brand-blue/30"
                         }`}
                       >
-                        <div className="pr-2">
-                          <div className="flex items-center space-x-1.5">
-                            <p className="text-xs font-semibold text-brand-offwhite">{product.name}</p>
-                            {product.unit && (
-                              <span className="text-[9px] px-1 py-0.2 rounded bg-brand-blue/40 text-brand-gold font-mono">
-                                {product.unit}
-                              </span>
-                            )}
+                        <div className="flex items-center space-x-2.5 pr-2">
+                          <div className="w-9 h-9 rounded-lg bg-brand-black border border-brand-blue/30 overflow-hidden shrink-0">
+                            <img
+                              src={(product as any).imageUrl || "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&auto=format&fit=crop&q=80"}
+                              alt={product.name}
+                              className="w-full h-full object-cover"
+                            />
                           </div>
-                          <p className="text-[11px] text-brand-gold font-bold">
-                            R$ {product.price.toFixed(2).replace(".", ",")}
-                          </p>
+                          <div>
+                            <div className="flex items-center space-x-1.5">
+                              <span className="text-[9px] px-1 py-0.2 rounded bg-brand-gold/15 text-brand-gold font-bold uppercase">
+                                {(product as any).brand || "LUKE"}
+                              </span>
+                              <p className="text-xs font-semibold text-brand-offwhite">{product.name}</p>
+                            </div>
+                            <p className="text-[11px] text-brand-gold font-bold mt-0.5">
+                              R$ {product.price.toFixed(2).replace(".", ",")}
+                            </p>
+                          </div>
                         </div>
 
                         <div className="flex items-center space-x-1.5 bg-brand-graphite px-2 py-1 rounded-lg border border-brand-blue/40 shrink-0">

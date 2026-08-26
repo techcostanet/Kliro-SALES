@@ -4,6 +4,20 @@ Todas as melhorias, novidades e correções notáveis deste projeto serão docum
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-08-26
+### Added
+- **Multi-Marcas & Gestão de Imagens no Catálogo de Produtos (`/luke/produtos`)**:
+  - Suporte completo a **múltiplas marcas** parceiras (ex: *LUKE Brasil, Alfa Look's, FOX For Men, QOD Barber Shop, Prohall, Wilkinson / Derby*).
+  - Suporte a **fotos e imagens de produtos** (`imageUrl`), com pré-visualização em miniatura (*thumbnail*) na listagem e campo de URL com preview dinâmico no modal de cadastro.
+  - Filtro exclusivo por Marca no topo do catálogo de produtos.
+  - Integração das fotos e badges de marcas no seletor de pedidos do **Modo Rua** (`/luke/rua`).
+- **Dashboard Executivo com Novos KPIs de Gestão (`/luke`)**:
+  - **KPIs Financeiros:** Faturamento Bruto (R$ 58.420,00), Ticket Médio por Salão (R$ 347,70), Contas a Receber P.A. (R$ 5.430,00), Contas a Pagar (R$ 3.745,00) e Saldo Líquido Positivo no Caixa (R$ 54.675,00).
+  - **Cobertura Operacional:** Salões Atendidos (168 / 559 salões no ciclo), Veículos em Campo (3 frotas ativas) e Taxa de Positivação (91,2%).
+  - **Ranking de Vendedores:** Metas individuais, faturamento de rota e comissões de Alisson, Alexandre e Lucas com barra de progresso.
+  - **Top 5 Produtos Mais Vendidos:** Giro de unidades e faturamento por produto cosmético com imagens.
+  - **Alerta de Ruptura de Estoque:** Monitoramento de produtos abaixo do estoque mínimo.
+
 ## [1.3.1] - 2026-08-26
 ### Fixed
 - **Estabilidade da Página de Vendedores (`/luke/vendedores`)**:
