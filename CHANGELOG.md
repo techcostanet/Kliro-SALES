@@ -4,7 +4,35 @@ Todas as melhorias, novidades e correções notáveis deste projeto serão docum
 
 ## [Unreleased]
 ### Added
-- **Fase 9: Métodos de Pagamento, 2 Planos Editáveis (Basic/Premium) & Credenciais Master**:
+- **Fase 11: Tela de Entrada Clean Light Unificada & Roteamento Inteligente Multi-Tenant**:
+  - **Identidade Visual Clean Light na Entrada (`/`)**:
+    - Aplicação de estética em tons claros institucionais (Slate 50, White, Índigo corporativo) com card suave e moderno.
+    - O isolamento de identidade da marca LUKE (paleta escura e dourada) permanece exclusivo dentro do portal `/luke` e `/luke/rua`.
+  - **Eliminação Completa do Seletor de Perfis**:
+    - Remoção dos botões de alternância "SaaS Master" / "Cliente LUKE", unificando o formulário para um padrão profissional global.
+  - **Roteamento Inteligente Automático (Role-Based Routing)**:
+    - O sistema identifica automaticamente o perfil do usuário logado:
+      - Administrador Master (`contato@techcosta.net` ou `@techcosta.net`) $\rightarrow$ redirecionado diretamente para `/saas-admin`.
+      - Usuários e gestores de clientes parceiros (ex: `admin@luke.com`, `alisson@luke.com`) $\rightarrow$ redirecionados diretamente para o painel da empresa (`/luke`).
+      - Suporte dinâmico para novos tenants através de `user_mappings` no Firestore.
+  - **Mapeamento & Normalização de Produtos (`src/lib/products_catalog.json`)**:
+    - Leitura, extração e normalização integral dos **46 produtos** oficiais da LUKE Brasil a partir da planilha `Backup Carregamento Alisson.xlsx`.
+    - Organização em 8 categorias comerciais (Pomadas & Ceras, Barba & Barbearia, Géis Fixadores, Finalizadores & Tratamentos, Lavatório & Cuidados, Perfumaria, Alisamentos & Química, Kits de Tratamento e Acessórios).
+    - Definição completa de campos: ID (`PROD-001` a `PROD-046`), Nome, Categoria, Unidade/Apresentação, Preço de Tabela, Preço de Custo, Código de Barras EAN-13, Estoque Mínimo, Estoque Físico, Reservado, Disponível e Flag de Bloqueio de Carga.
+  - **Catálogo Interativo de Produtos (`/luke/produtos` & `/dashboard/produtos`)**:
+    - Listagem completa dos 46 produtos com filtros rápidos por categoria, busca textual em tempo real e controle de status.
+    - Sincronização em lote em 1 clique com o Firestore (`/tenants/tenant_luke_001/products`).
+    - Modal de cadastro e edição de produtos com todos os campos cadastrais e operacionais.
+  - **Novo Módulo Digital de Carregamento (`/luke/carregamento`)**:
+    - Substituição completa das 20 abas manuais do Excel por interface dinâmica e responsiva.
+    - Controle por Ciclo de Carregamento (1 a 20) com seleção do Vendedor Responsável (Alisson, Alexandre, Lucas), Data e Status de Aprovação.
+    - Tabela de 46 itens com campos de Aprovação individual, Quantidade Solicitada, Quantidade de Carregamento e Devolução.
+    - Cálculo automático em tempo real de **Distribuído Líquido** (`Carregado - Devolvido`) e Faturamento Estimado da carga.
+    - Aba **Resumo Consolidado do Mês** totalizando automaticamente todas as 20 cargas do período.
+  - **Integração com Modo Rua (`/luke/rua` & `/rua`)**:
+    - Seletor de produtos com busca instantânea e catálogo completo dos 46 itens para pedidos durante os atendimentos nas barbearias.
+  - **Carga Inicial Automatizada (`/seed`)**:
+    - Gravação em lote de todos os 46 produtos no Firestore durante o setup inicial.
   - **Rebranding Master**: Atualização da assinatura corporativa para **Tech Costa Systems**.
   - **Gestão de Métodos de Pagamento (`/saas-admin/pagamentos`)**:
     - Suporte a configuração de **Pix Instantâneo**, **Boleto Bancário** e **Cartão de Crédito**.

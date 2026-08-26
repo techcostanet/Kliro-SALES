@@ -3,11 +3,18 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, Edit2, Trash2 } from "lucide-react";
 
+import initialProducts from "@/lib/products_catalog.json";
+
 export default function ProductsPage() {
-  const [products, setProducts] = useState([
-    { id: "1", name: "Produto A", price: 15.50, barcode: "78910001", active: true },
-    { id: "2", name: "Produto B", price: 22.00, barcode: "78910002", active: true },
-  ]);
+  const [products, setProducts] = useState(initialProducts);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const filtered = products.filter(
+    (p) =>
+      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.barcode.includes(searchTerm) ||
+      p.category.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div>
@@ -30,8 +37,10 @@ export default function ProductsPage() {
             </div>
             <input
               type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
               className="block w-full pl-10 pr-3 py-2 bg-brand-black border border-brand-blue/50 rounded-lg text-sm text-brand-offwhite placeholder-brand-offwhite/30 focus:outline-none focus:ring-1 focus:ring-brand-gold"
-              placeholder="Buscar por nome ou código..."
+              placeholder="Buscar por nome, código ou categoria..."
             />
           </div>
         </div>
@@ -40,6 +49,7 @@ export default function ProductsPage() {
           <thead>
             <tr className="bg-brand-blue/10 border-b border-brand-blue/30 text-brand-offwhite/70 text-sm">
               <th className="p-4 font-medium">Nome do Produto</th>
+              <th className="p-4 font-medium">Categoria</th>
               <th className="p-4 font-medium">Código de Barras</th>
               <th className="p-4 font-medium">Preço (R$)</th>
               <th className="p-4 font-medium">Status</th>
@@ -47,10 +57,18 @@ export default function ProductsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-brand-blue/10">
-            {products.map((product) => (
+            {filtered.map((product) => (
               <tr key={product.id} className="hover:bg-brand-blue/5 transition group">
-                <td className="p-4 text-brand-offwhite font-medium">{product.name}</td>
-                <td className="p-4 text-brand-offwhite/70">{product.barcode}</td>
+                <td className="p-4 text-brand-offwhite font-medium">
+                  <div className="flex items-center space-x-2">
+                    <span>{product.name}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-brand-blue/30 text-brand-gold font-mono">
+                      {product.unit}
+                    </span>
+                  </div>
+                </td>
+                <td className="p-4 text-brand-offwhite/70 text-xs">{product.category}</td>
+                <td className="p-4 text-brand-offwhite/70 font-mono text-xs">{product.barcode}</td>
                 <td className="p-4 text-brand-gold font-bold">R$ {product.price.toFixed(2).replace('.', ',')}</td>
                 <td className="p-4">
                   <span className="px-2 py-1 bg-green-500/10 text-green-400 text-xs rounded-full border border-green-500/20">

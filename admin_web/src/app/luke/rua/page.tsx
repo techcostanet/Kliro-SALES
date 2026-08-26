@@ -13,14 +13,19 @@ import {
   QrCode,
   Banknote,
   DollarSign,
+  Search,
 } from "lucide-react";
 import Link from "next/link";
+
+import initialProducts from "@/lib/products_catalog.json";
 
 interface Product {
   id: string;
   name: string;
   price: number;
   barcode: string;
+  category?: string;
+  unit?: string;
 }
 
 interface Client {
@@ -36,16 +41,13 @@ interface Client {
 export default function LukeModoRuaPage() {
   const [routeStatus, setRouteStatus] = useState<"OPEN" | "CLOSED">("OPEN");
   const [closedHash, setClosedHash] = useState<string | null>(null);
+  const [productSearch, setProductSearch] = useState("");
+  const [productFilterCat, setProductFilterCat] = useState("Todas");
 
-  const vendorName = "Carlos Eduardo";
-  const routeName = "Rota Centro & Zona Sul";
+  const vendorName = "Alisson";
+  const routeName = "Rota Centro & Barbearias Norte";
 
-  const productsCatalog: Product[] = [
-    { id: "p1", name: "Produto A - Premium 1kg", price: 28.5, barcode: "78910001" },
-    { id: "p2", name: "Produto B - Tradicional 500g", price: 15.0, barcode: "78910002" },
-    { id: "p3", name: "Produto C - Especial Caixa", price: 65.0, barcode: "78910003" },
-    { id: "p4", name: "Produto D - Display c/ 12un", price: 42.0, barcode: "78910004" },
-  ];
+  const productsCatalog: Product[] = initialProducts;
 
   const [clients, setClients] = useState<Client[]>([
     {
@@ -326,45 +328,79 @@ export default function LukeModoRuaPage() {
               </button>
             </div>
 
-            {/* Catálogo com Stepper */}
+            {/* Catálogo com Stepper e Busca */}
             <div className="space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-brand-offwhite/70">
-                Produtos do Pedido
-              </h4>
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-brand-offwhite/70">
+                  Produtos do Pedido ({Object.values(cart).reduce((a, b) => a + b, 0)} itens)
+                </h4>
+              </div>
 
-              <div className="space-y-2">
-                {productsCatalog.map((product) => {
-                  const qty = cart[product.id] || 0;
-                  return (
-                    <div
-                      key={product.id}
-                      className="p-3 bg-brand-black/60 rounded-xl border border-brand-blue/30 flex justify-between items-center"
-                    >
-                      <div>
-                        <p className="text-sm font-semibold text-brand-offwhite">{product.name}</p>
-                        <p className="text-xs text-brand-gold font-bold">
-                          R$ {product.price.toFixed(2).replace(".", ",")}
-                        </p>
-                      </div>
+              {/* Busca rápida de produto no atendimento */}
+              <div className="relative">
+                <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-brand-offwhite/40" />
+                <input
+                  type="text"
+                  value={productSearch}
+                  onChange={(e) => setProductSearch(e.target.value)}
+                  placeholder="Filtrar entre os 46 produtos..."
+                  className="w-full pl-8 pr-3 py-1.5 bg-brand-black border border-brand-blue/40 rounded-lg text-xs text-brand-offwhite placeholder-brand-offwhite/30 focus:outline-none focus:border-brand-gold"
+                />
+              </div>
 
-                      <div className="flex items-center space-x-2 bg-brand-graphite px-2 py-1 rounded-lg border border-brand-blue/40">
-                        <button
-                          onClick={() => handleUpdateQty(product.id, -1)}
-                          className="p-1 text-brand-offwhite/70 hover:text-brand-gold transition"
-                        >
-                          <Minus size={14} />
-                        </button>
-                        <span className="font-bold text-sm w-5 text-center">{qty}</span>
-                        <button
-                          onClick={() => handleUpdateQty(product.id, 1)}
-                          className="p-1 text-brand-offwhite/70 hover:text-brand-gold transition"
-                        >
-                          <Plus size={14} />
-                        </button>
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1 scrollbar-thin">
+                {productsCatalog
+                  .filter((p) =>
+                    p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+                    (p.category && p.category.toLowerCase().includes(productSearch.toLowerCase()))
+                  )
+                  .map((product) => {
+                    const qty = cart[product.id] || 0;
+                    return (
+                      <div
+                        key={product.id}
+                        className={`p-2.5 rounded-xl border flex justify-between items-center transition ${
+                          qty > 0
+                            ? "bg-brand-blue/20 border-brand-gold/40"
+                            : "bg-brand-black/60 border-brand-blue/30"
+                        }`}
+                      >
+                        <div className="pr-2">
+                          <div className="flex items-center space-x-1.5">
+                            <p className="text-xs font-semibold text-brand-offwhite">{product.name}</p>
+                            {product.unit && (
+                              <span className="text-[9px] px-1 py-0.2 rounded bg-brand-blue/40 text-brand-gold font-mono">
+                                {product.unit}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-brand-gold font-bold">
+                            R$ {product.price.toFixed(2).replace(".", ",")}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center space-x-1.5 bg-brand-graphite px-2 py-1 rounded-lg border border-brand-blue/40 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateQty(product.id, -1)}
+                            className="p-1 text-brand-offwhite/70 hover:text-brand-gold transition"
+                          >
+                            <Minus size={13} />
+                          </button>
+                          <span className={`font-bold text-xs w-5 text-center ${qty > 0 ? "text-brand-gold" : "text-brand-offwhite/60"}`}>
+                            {qty}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateQty(product.id, 1)}
+                            className="p-1 text-brand-offwhite/70 hover:text-brand-gold transition"
+                          >
+                            <Plus size={13} />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
               </div>
             </div>
 

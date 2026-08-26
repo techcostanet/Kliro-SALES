@@ -19,12 +19,15 @@ import {
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
+import initialProducts from "@/lib/products_catalog.json";
 
 interface Product {
   id: string;
   name: string;
   price: number;
   barcode: string;
+  category?: string;
+  unit?: string;
 }
 
 interface Client {
@@ -43,16 +46,11 @@ export default function ModoRuaPage() {
   const [closedHash, setClosedHash] = useState<string | null>(null);
 
   // Vendedor e Catálogo
-  const vendorName = "Carlos Eduardo";
+  const vendorName = "Alisson";
   const tenantName = "LUKE Brasil";
-  const routeName = "Rota Centro & Zona Sul";
+  const routeName = "Rota Centro & Barbearias Norte";
 
-  const productsCatalog: Product[] = [
-    { id: "p1", name: "Produto A - Premium 1kg", price: 28.5, barcode: "78910001" },
-    { id: "p2", name: "Produto B - Tradicional 500g", price: 15.0, barcode: "78910002" },
-    { id: "p3", name: "Produto C - Especial Caixa", price: 65.0, barcode: "78910003" },
-    { id: "p4", name: "Produto D - Display c/ 12un", price: 42.0, barcode: "78910004" },
-  ];
+  const productsCatalog: Product[] = initialProducts;
 
   // Lista de Clientes da Rota
   const [clients, setClients] = useState<Client[]>([

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { LayoutDashboard, Users, Map, LogOut, Package, Wallet, ArrowLeft } from "lucide-react";
+import { LayoutDashboard, Users, Map, LogOut, Package, Wallet, ArrowLeft, Truck } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -32,6 +32,7 @@ export default function LukeDashboardLayout({
   const navLinks = [
     { label: "Visão Geral", href: "/luke", icon: LayoutDashboard, exact: true },
     { label: "Rotas Ativas", href: "/luke/rotas", icon: Map },
+    { label: "Carregamentos", href: "/luke/carregamento", icon: Truck },
     { label: "Transações", href: "/luke/transacoes", icon: Wallet },
     { label: "Vendedores", href: "/luke/vendedores", icon: Users },
     { label: "Produtos", href: "/luke/produtos", icon: Package },
