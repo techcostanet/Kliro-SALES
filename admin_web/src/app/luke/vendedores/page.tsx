@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Plus,
   Search,
@@ -11,7 +11,6 @@ import {
   Phone,
   Truck,
   DollarSign,
-  MapPin,
   CheckCircle2,
   X,
   RefreshCw,
@@ -129,12 +128,26 @@ export default function LukeVendedoresPage() {
       if (!snapshot.empty) {
         const loaded: VendorItem[] = [];
         snapshot.forEach((docSnap) => {
-          loaded.push({ id: docSnap.id, ...docSnap.data() } as VendorItem);
+          const d = docSnap.data();
+          loaded.push({
+            id: docSnap.id,
+            name: d.name || "Vendedor",
+            email: d.email || "",
+            role: d.role || "VENDOR",
+            phone: d.phone || "(31) 99999-9999",
+            vehicle: d.vehicle || "Veículo Comercial",
+            vehiclePlate: d.vehiclePlate || "---",
+            commissionRate: typeof d.commissionRate === "number" ? d.commissionRate : 8.0,
+            assignedRoutes: Array.isArray(d.assignedRoutes) ? d.assignedRoutes : ["R1"],
+            monthlyTarget: typeof d.monthlyTarget === "number" ? d.monthlyTarget : 35000,
+            status: d.status || "ACTIVE",
+            notes: d.notes || "",
+          });
         });
         setVendors(loaded);
       }
     } catch (err: any) {
-      console.warn("Firestore fetch offline/fallback para initial vendors:", err.message);
+      console.warn("Firestore fetch offline/fallback para initial vendors:", err?.message);
     } finally {
       setLoadingFirestore(false);
     }
@@ -159,24 +172,26 @@ export default function LukeVendedoresPage() {
       setSyncMessage("✅ Equipe comercial sincronizada com o Firestore com sucesso!");
       setTimeout(() => setSyncMessage(null), 4000);
     } catch (err: any) {
-      setSyncMessage(`❌ Erro ao sincronizar: ${err.message}`);
+      setSyncMessage(`❌ Erro ao sincronizar: ${err?.message}`);
     } finally {
       setLoadingFirestore(false);
     }
   };
 
-  const filtered = vendors.filter((v) => {
-    const matchesSearch =
-      v.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      v.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      v.phone.includes(searchTerm) ||
-      v.vehicle.toLowerCase().includes(searchTerm.toLowerCase());
+  const filtered = useMemo(() => {
+    return vendors.filter((v) => {
+      const nameMatch = v.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const emailMatch = v.email.toLowerCase().includes(searchTerm.toLowerCase());
+      const phoneMatch = v.phone ? v.phone.includes(searchTerm) : false;
+      const vehicleMatch = v.vehicle ? v.vehicle.toLowerCase().includes(searchTerm.toLowerCase()) : false;
+      const matchesSearch = nameMatch || emailMatch || phoneMatch || vehicleMatch;
 
-    const matchesRole =
-      selectedRoleFilter === "ALL" || v.role === selectedRoleFilter;
+      const matchesRole =
+        selectedRoleFilter === "ALL" || v.role === selectedRoleFilter;
 
-    return matchesSearch && matchesRole;
-  });
+      return matchesSearch && matchesRole;
+    });
+  }, [vendors, searchTerm, selectedRoleFilter]);
 
   // Modal Handlers
   const handleOpenModal = (v?: VendorItem) => {
@@ -260,7 +275,7 @@ export default function LukeVendedoresPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm("Deseja realmente remover este vendedor da equipe comercial?")) {
+    if (confirm("Deseja realmente remover este integrante da equipe?")) {
       setVendors((prev) => prev.filter((v) => v.id !== id));
       try {
         await deleteDoc(doc(db, `tenants/${tenantId}/users`, id));
@@ -268,8 +283,13 @@ export default function LukeVendedoresPage() {
     }
   };
 
-  const totalTarget = vendors.reduce((acc, curr) => acc + (curr.monthlyTarget || 0), 0);
-  const activeVendors = vendors.filter((v) => v.status === "ACTIVE").length;
+  const totalTarget = useMemo(() => {
+    return vendors.reduce((acc, curr) => acc + (curr.monthlyTarget || 0), 0);
+  }, [vendors]);
+
+  const activeVendors = useMemo(() => {
+    return vendors.filter((v) => v.status === "ACTIVE").length;
+  }, [vendors]);
 
   return (
     <div className="space-y-8">

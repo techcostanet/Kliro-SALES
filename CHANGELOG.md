@@ -4,6 +4,12 @@ Todas as melhorias, novidades e correções notáveis deste projeto serão docum
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-08-26
+### Fixed
+- **Estabilidade da Página de Vendedores (`/luke/vendedores`)**:
+  - Limpeza e reconstrução do componente eliminando duplicatas de bloco que causavam instabilidade de renderização no navegador.
+  - Correção do redirecionamento do botão de logout no layout da LUKE para a página inicial `/`.
+
 ## [1.3.0] - 2026-08-26
 ### Added
 - **Módulo Completo de Salões & Clientes de Rota (`/luke/clientes`)**:

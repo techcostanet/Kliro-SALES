@@ -26,7 +26,7 @@ export default function LukeDashboardLayout({
 
   const handleLogout = async () => {
     await signOut(auth);
-    window.location.href = "/luke";
+    window.location.href = "/";
   };
 
   const navLinks = [
