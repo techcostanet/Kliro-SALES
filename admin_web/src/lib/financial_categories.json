@@ -1,0 +1,122 @@
+[
+  {
+    "id": "CAT-001",
+    "name": "Alimentação Rota",
+    "type": "EXPENSE",
+    "status": "ACTIVE"
+  },
+  {
+    "id": "CAT-002",
+    "name": "Pró-Labore Sócios",
+    "type": "EXPENSE",
+    "status": "ACTIVE"
+  },
+  {
+    "id": "CAT-003",
+    "name": "Empréstimos & Financiamentos",
+    "type": "EXPENSE",
+    "status": "ACTIVE"
+  },
+  {
+    "id": "CAT-004",
+    "name": "Salário Alisson (Vendedor)",
+    "type": "EXPENSE",
+    "status": "ACTIVE"
+  },
+  {
+    "id": "CAT-005",
+    "name": "Salário Alexandre (Vendedor)",
+    "type": "EXPENSE",
+    "status": "ACTIVE"
+  },
+  {
+    "id": "CAT-006",
+    "name": "Salário Sabrina (Admin)",
+    "type": "EXPENSE",
+    "status": "ACTIVE"
+  },
+  {
+    "id": "CAT-007",
+    "name": "Salário Arthur",
+    "type": "EXPENSE",
+    "status": "ACTIVE"
+  },
+  {
+    "id": "CAT-008",
+    "name": "Fornecedores & Fábrica (Cosméticos)",
+    "type": "EXPENSE",
+    "status": "ACTIVE"
+  },
+  {
+    "id": "CAT-009",
+    "name": "Combustível & Abastecimento",
+    "type": "EXPENSE",
+    "status": "ACTIVE"
+  },
+  {
+    "id": "CAT-010",
+    "name": "Manutenção de Veículos",
+    "type": "EXPENSE",
+    "status": "ACTIVE"
+  },
+  {
+    "id": "CAT-011",
+    "name": "Aluguel & Galpão",
+    "type": "EXPENSE",
+    "status": "ACTIVE"
+  },
+  {
+    "id": "CAT-012",
+    "name": "Energia Elétrica",
+    "type": "EXPENSE",
+    "status": "ACTIVE"
+  },
+  {
+    "id": "CAT-013",
+    "name": "Água & Saneamento",
+    "type": "EXPENSE",
+    "status": "ACTIVE"
+  },
+  {
+    "id": "CAT-014",
+    "name": "Internet & Telefonia",
+    "type": "EXPENSE",
+    "status": "ACTIVE"
+  },
+  {
+    "id": "CAT-015",
+    "name": "Contabilidade & Impostos",
+    "type": "EXPENSE",
+    "status": "ACTIVE"
+  },
+  {
+    "id": "CAT-016",
+    "name": "Seguro de Veículos (Frota)",
+    "type": "EXPENSE",
+    "status": "ACTIVE"
+  },
+  {
+    "id": "CAT-017",
+    "name": "Vendas de Rota (Pronta-Entrega)",
+    "type": "INCOME",
+    "status": "ACTIVE"
+  },
+  {
+    "id": "CAT-018",
+    "name": "Recebimento de P.A. (Boleto/Prazo)",
+    "type": "INCOME",
+    "status": "ACTIVE"
+  },
+  {
+    "id": "CAT-019",
+    "name": "Recebimento de Repasses",
+    "type": "INCOME",
+    "status": "ACTIVE"
+  },
+  {
+    "id": "CAT-020",
+    "name": "Venda Direta / Distribuidor",
+    "type": "INCOME",
+    "status": "ACTIVE"
+  }
+]

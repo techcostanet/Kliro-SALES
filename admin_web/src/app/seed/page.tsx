@@ -80,7 +80,7 @@ export default function SeedPage() {
         tenantId: tenantId,
       });
 
-      setMessage(`✅ Sucesso! Usuário admin@luke.com configurado e ${initialProducts.length} produtos cadastrados com sucesso.`);
+      setMessage(`✅ Sucesso! Setup concluído com ${initialProducts.length} produtos, equipe comercial e estrutura pronta.`);
 
       // Redireciona para o login após 2 segundos
       setTimeout(() => {

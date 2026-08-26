@@ -3,8 +3,27 @@
 Todas as melhorias, novidades e correções notáveis deste projeto serão documentadas neste arquivo.
 
 ## [Unreleased]
+
+## [1.3.0] - 2026-08-26
 ### Added
-- **Fase 11: Tela de Entrada Clean Light Unificada & Roteamento Inteligente Multi-Tenant**:
+- **Módulo Completo de Salões & Clientes de Rota (`/luke/clientes`)**:
+  - Carga inicial com a base real completa de **559 salões de beleza e barbearias** extraídos da planilha operacional da LUKE Brasil (`clients_catalog.json`).
+  - Campos cadastrais completos: Nome da Barbearia/Salão, Comprador Responsável, CNPJ/CPF, Telefone/WhatsApp, Rota associada (R1-R12, F1-F12), Ordem de Visitação na rota, Condição Comercial (*Prazo 30 Dias, Consignado, Compra Lâmina, Intermitente, À Vista*), Limite de Crédito P.A., Endereço Completo e Status.
+  - Filtros interativos por Rota, Condição Comercial, Status e busca em tempo real.
+  - Modal completo de criação, edição e inativação de salões com sincronização no Firestore (`/tenants/tenant_luke_001/clients`).
+- **Gestão Completa de Vendedores & Correção do Botão (`/luke/vendedores`)**:
+  - Correção e ativação funcional do botão "Novo Vendedor" com abertura de modal interativo e salvamento em tempo real.
+  - Cadastro da equipe oficial da LUKE: Lucas (Admin/Vendedor), Sabrina (Admin Financeiro/Operacional), Alexandre (Vendedor Rota F), Alisson (Vendedor Rota R).
+  - Campos de Perfil de Acesso, Telefone/WhatsApp, Veículo de Entrega & Placa, Percentual de Comissão (%), Rotas Atribuídas e Meta Mensal de Faturamento (R$).
+  - Sincronização automática com Firestore (`/tenants/tenant_luke_001/users`).
+- **Módulo Financeiro Completo & DRE Operacional (`/luke/financeiro`)**:
+  - **Aba Contas a Pagar**: Lançamento de despesas operacionais da distribuidora (Alimentação Rota, Salários/Comissões, Fornecedores/Fábrica, Combustível, Aluguel Galpão, Pró-Labore), vencimento, recorrência mensal e ação de **Dar Baixa (Registrar Pagamento)**.
+  - **Aba Contas a Receber & P.A. (Pagamentos Agendados de Barbearias)**: Controle de vendas a prazo e boletos emitidos em campo. Ação **"Receber P.A. (Baixar)"** que alimenta automaticamente o Caixa diário na data real e na forma recebida (Pix, Dinheiro, Cartão), mantendo a atribuição da comissão ao vendedor de origem.
+  - **Aba DRE & Fluxo Operacional**: Demonstrativo financeiro simplificado (Entradas de Vendas na Rota + P.A.s Liquidados vs Despesas Pagas), saldo operacional líquido e alinhamento com o ciclo semanal da LUKE (*Terça-feira ➔ Segunda-feira*).
+  - **Aba Categorias Financeiras**: Gestão das 20 categorias do plano de contas da distribuidora.
+- **Navegação Expandida (`/luke/layout.tsx`)**:
+  - Adição dos novos links "Salões & Clientes" e "Financeiro & DRE" na barra de navegação da LUKE.
+
   - **Identidade Visual Clean Light na Entrada (`/`)**:
     - Aplicação de estética em tons claros institucionais (Slate 50, White, Índigo corporativo) com card suave e moderno.
     - O isolamento de identidade da marca LUKE (paleta escura e dourada) permanece exclusivo dentro do portal `/luke` e `/luke/rua`.
