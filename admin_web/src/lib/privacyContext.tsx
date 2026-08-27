@@ -5,13 +5,13 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 interface PrivacyContextType {
   hideValues: boolean;
   togglePrivacy: () => void;
-  formatValue: (amount: number, prefix?: string) => string;
+  formatValue: (amount: number, prefixOrType?: string) => string;
 }
 
 const PrivacyContext = createContext<PrivacyContextType>({
   hideValues: true,
   togglePrivacy: () => {},
-  formatValue: () => "••••••",
+  formatValue: () => "R$ ••••••",
 });
 
 export function PrivacyProvider({ children }: { children: React.ReactNode }) {
@@ -33,11 +33,32 @@ export function PrivacyProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const formatValue = (amount: number, prefix: string = "R$ ") => {
-    if (hideValues) {
-      return `${prefix}••••••`;
+  const formatValue = (amount: number, prefixOrType: string = "R$ ") => {
+    let actualPrefix = "R$ ";
+    if (prefixOrType === "currency" || !prefixOrType) {
+      actualPrefix = "R$ ";
+    } else if (prefixOrType === "number") {
+      actualPrefix = "";
+    } else {
+      actualPrefix = prefixOrType;
     }
-    return `${prefix}${amount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+    if (hideValues) {
+      return `${actualPrefix}••••••`.trim();
+    }
+
+    const num = isNaN(amount) ? 0 : amount;
+    const isNegative = num < 0;
+    const formattedNumber = Math.abs(num).toLocaleString("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+
+    if (isNegative) {
+      return `-${actualPrefix}${formattedNumber}`;
+    }
+
+    return `${actualPrefix}${formattedNumber}`;
   };
 
   return (
