@@ -91,7 +91,7 @@ export default function UnifiedLoginPage() {
             Kliro-SALES
           </h1>
           <p className="text-xs text-slate-500 font-medium">
-            Plataforma Comercial Multi-Tenant • Tech Costa Systems
+            Plataforma Comercial
           </p>
         </div>
 

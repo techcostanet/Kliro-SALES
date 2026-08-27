@@ -27,6 +27,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePrivacy } from "@/lib/privacyContext";
+import { getVendorColor } from "@/lib/vendorColors";
+import VendorBadge from "@/components/VendorBadge";
 
 export default function LukeOverviewPage() {
   const { hideValues, togglePrivacy, formatValue } = usePrivacy();
@@ -313,25 +315,31 @@ export default function LukeOverviewPage() {
           <div className="space-y-4">
             {vendorRanking.map((v, i) => {
               const percent = Math.min(100, Math.round((v.totalSales / v.target) * 100));
+              const color = getVendorColor(v.name);
               return (
                 <div
                   key={v.name}
-                  className="p-4 bg-brand-black/60 rounded-xl border border-brand-blue/30 space-y-3"
+                  className="p-4 bg-brand-black/60 rounded-xl border border-brand-blue/30 space-y-3 relative overflow-hidden group hover:border-brand-gold/50 transition"
                 >
-                  <div className="flex justify-between items-start">
+                  <div style={{ backgroundColor: color }} className="absolute top-0 left-0 bottom-0 w-1" />
+                  <div className="flex justify-between items-start pl-1">
                     <div className="flex items-center space-x-3">
-                      <div className="w-8 h-8 rounded-full bg-brand-gold/20 text-brand-gold font-bold flex items-center justify-center border border-brand-gold/40 text-sm">
+                      <div
+                        style={{ borderColor: color, color }}
+                        className="w-8 h-8 rounded-full bg-brand-black font-extrabold flex items-center justify-center border-2 text-xs shadow-xs"
+                      >
                         #{i + 1}
                       </div>
                       <div>
                         <div className="flex items-center space-x-2">
                           <p className="text-sm font-bold text-brand-offwhite">{v.name}</p>
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-blue/40 text-brand-gold font-medium">
+                          <VendorBadge vendorName={v.name} color={color} size="xs" variant="chip" />
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-blue/40 text-brand-offwhite/80 font-medium font-mono">
                             {v.vehicle}
                           </span>
                         </div>
                         <p className="text-xs text-brand-offwhite/50 mt-0.5">
-                          {v.routes} • {v.visitsCount} clientes
+                          {v.routes} • {v.visitsCount} clientes atendidos
                         </p>
                       </div>
                     </div>
@@ -347,15 +355,15 @@ export default function LukeOverviewPage() {
                   </div>
 
                   {/* Barra de Progresso da Meta */}
-                  <div className="space-y-1">
+                  <div className="space-y-1 pl-1">
                     <div className="flex justify-between text-[11px] text-brand-offwhite/60">
                       <span>Meta: {formatValue(v.target, "currency")}</span>
                       <span className="font-bold text-brand-gold">{percent}%</span>
                     </div>
                     <div className="w-full bg-brand-graphite h-2 rounded-full overflow-hidden border border-brand-blue/20">
                       <div
-                        className="bg-brand-gold h-full rounded-full transition-all"
-                        style={{ width: `${percent}%` }}
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{ width: `${percent}%`, backgroundColor: color }}
                       />
                     </div>
                   </div>

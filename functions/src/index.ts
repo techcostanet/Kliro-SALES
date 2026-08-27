@@ -1,23 +1,24 @@
-import * as functions from 'firebase-functions';
+import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
+import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore';
 
 admin.initializeApp();
 
 // Função para fechamento de rota (Anti-Fraude)
-export const closeRouteExecution = functions.https.onCall(async (data, context) => {
+export const closeRouteExecution = functions.https.onCall(async (data: { executionId: string; routeId?: string }, context: functions.https.CallableContext) => {
     // 1. Verificar Autenticação
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'O usuário precisa estar logado.');
     }
 
-    const { executionId, routeId } = data;
+    const { executionId } = data;
     const tenantId = context.auth.token.tenantId;
 
     if (!tenantId) {
         throw new functions.https.HttpsError('permission-denied', 'Usuário não pertence a nenhuma empresa.');
     }
 
-    const db = admin.firestore();
+    const db = getFirestore();
     const executionRef = db.doc(`tenants/${tenantId}/route_executions/${executionId}`);
     
     // Transação para garantir consistência
@@ -34,7 +35,7 @@ export const closeRouteExecution = functions.https.onCall(async (data, context) 
 
         // Lógica de auditoria e travamento
         // Aqui podemos varrer todas as transações, somar os totais e gerar um Hash
-        const closedAt = admin.firestore.Timestamp.now();
+        const closedAt = Timestamp.now();
         const auditHash = `HASH-${executionId}-${closedAt.toMillis()}`; // Placeholder para o hash real
 
         transaction.update(executionRef, {
@@ -50,12 +51,13 @@ export const closeRouteExecution = functions.https.onCall(async (data, context) 
 // Trigger: Consolidação Financeira (Roda sempre que uma nova transação é criada)
 export const consolidateFinancials = functions.firestore
     .document('tenants/{tenantId}/transactions/{transactionId}')
-    .onCreate(async (snap, context) => {
+    .onCreate(async (snap: functions.firestore.DocumentSnapshot, context: functions.EventContext) => {
         const transactionData = snap.data();
+        if (!transactionData) return;
+
         const tenantId = context.params.tenantId;
 
-        const db = admin.firestore();
-        const tenantRef = db.doc(`tenants/${tenantId}`);
+        const db = getFirestore();
         const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
         const summaryRef = db.doc(`tenants/${tenantId}/financial_summaries/${currentMonth}`);
 
@@ -78,7 +80,7 @@ export const consolidateFinancials = functions.firestore
             transaction.set(summaryRef, {
                 totalRevenue,
                 transactionCount: transactionCount + 1,
-                lastUpdate: admin.firestore.FieldValue.serverTimestamp()
+                lastUpdate: FieldValue.serverTimestamp()
             }, { merge: true });
         });
         

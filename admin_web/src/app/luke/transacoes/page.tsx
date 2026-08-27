@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { DollarSign, Search, ArrowDownLeft, ArrowUpRight, QrCode, Banknote, FileText, Eye, EyeOff } from "lucide-react";
 import { usePrivacy } from "@/lib/privacyContext";
+import VendorBadge from "@/components/VendorBadge";
 
 export default function LukeTransacoesPage() {
   const { hideValues, togglePrivacy, formatValue } = usePrivacy();
@@ -166,7 +167,9 @@ export default function LukeTransacoesPage() {
               {filtered.map((t) => (
                 <tr key={t.id} className="hover:bg-brand-blue/5 transition">
                   <td className="p-4 font-bold text-brand-offwhite">{t.clientName}</td>
-                  <td className="p-4 text-brand-offwhite/80">{t.vendorName}</td>
+                  <td className="p-4">
+                    <VendorBadge vendorName={t.vendorName} size="xs" variant="chip" />
+                  </td>
                   <td className="p-4">
                     <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-blue/20 text-brand-offwhite border border-brand-blue/40">
                       {t.paymentMethod === "PIX" && <QrCode size={12} className="text-teal-400" />}

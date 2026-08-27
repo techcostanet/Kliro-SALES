@@ -20,6 +20,8 @@ import {
 } from "lucide-react";
 import initialProducts from "@/lib/products_catalog.json";
 import { usePrivacy } from "@/lib/privacyContext";
+import { getVendorColor } from "@/lib/vendorColors";
+import VendorBadge from "@/components/VendorBadge";
 
 interface LoadingItem {
   productId: string;
@@ -276,19 +278,22 @@ export default function CarregamentoPage() {
       {/* Seletor de Vendedor & Informações da Carga */}
       <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-lg grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
-          <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-            Vendedor
-          </label>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs font-semibold text-brand-offwhite/70">
+              Vendedor
+            </label>
+            <VendorBadge vendorName={selectedVendor} size="xs" variant="solid" />
+          </div>
           <div className="flex items-center space-x-2">
             <User size={18} className="text-brand-gold shrink-0" />
             <select
               value={selectedVendor}
               onChange={(e) => setSelectedVendor(e.target.value)}
-              className="w-full bg-brand-black border border-brand-blue/50 text-brand-offwhite rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-gold"
+              className="w-full bg-brand-black border border-brand-blue/50 text-brand-offwhite rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-gold font-bold"
             >
-              <option value="Alisson">Alisson (Vendedor)</option>
-              <option value="Alexandre">Alexandre (Vendedor)</option>
-              <option value="Lucas">Lucas (Admin / Vendedor)</option>
+              <option value="Alisson">Alisson (Vendedor - Rotas R)</option>
+              <option value="Alexandre">Alexandre (Vendedor - Rotas F)</option>
+              <option value="Lucas">Lucas (Admin / Vendedor - Especial)</option>
             </select>
           </div>
         </div>

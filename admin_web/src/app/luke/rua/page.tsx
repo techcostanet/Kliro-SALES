@@ -18,6 +18,9 @@ import {
 import Link from "next/link";
 
 import initialProducts from "@/lib/products_catalog.json";
+import { getVendorColor } from "@/lib/vendorColors";
+import { MASTER_ROUTES_CATALOG } from "@/lib/routesCatalog";
+import VendorBadge from "@/components/VendorBadge";
 
 interface Product {
   id: string;
@@ -38,14 +41,23 @@ interface Client {
   lastSaleAmount?: number;
 }
 
+const AVAILABLE_VENDORS = ["Alisson", "Alexandre", "Lucas"];
+
 export default function LukeModoRuaPage() {
   const [routeStatus, setRouteStatus] = useState<"OPEN" | "CLOSED">("OPEN");
   const [closedHash, setClosedHash] = useState<string | null>(null);
   const [productSearch, setProductSearch] = useState("");
   const [productFilterCat, setProductFilterCat] = useState("Todas");
 
-  const vendorName = "Alisson";
-  const routeName = "Rota Centro & Barbearias Norte";
+  const [selectedVendor, setSelectedVendor] = useState("Alisson");
+  const [selectedRouteCode, setSelectedRouteCode] = useState("F10");
+  const [isRouteSelectorOpen, setIsRouteSelectorOpen] = useState(false);
+
+  const vendorColor = getVendorColor(selectedVendor);
+  const currentRoute = MASTER_ROUTES_CATALOG.find((r) => r.code === selectedRouteCode) || {
+    code: selectedRouteCode,
+    name: `Rota ${selectedRouteCode} - Lagoa Santa & Vetor Norte`,
+  };
 
   const productsCatalog: Product[] = initialProducts;
 
@@ -153,8 +165,9 @@ export default function LukeModoRuaPage() {
   return (
     <div className="min-h-screen bg-brand-black text-brand-offwhite pb-12">
       {/* Top Header Mobile */}
-      <div className="bg-brand-graphite border-b border-brand-blue/30 sticky top-0 z-30 shadow-xl">
-        <div className="max-w-xl mx-auto px-4 py-3.5 flex justify-between items-center">
+      <div className="bg-brand-graphite border-b border-brand-blue/30 sticky top-0 z-30 shadow-xl relative">
+        <div style={{ backgroundColor: vendorColor }} className="h-1 w-full absolute top-0 left-0 right-0" />
+        <div className="max-w-xl mx-auto px-4 py-3 flex justify-between items-center">
           <div className="flex items-center space-x-3">
             <Link
               href="/luke"
@@ -165,12 +178,25 @@ export default function LukeModoRuaPage() {
             </Link>
             <div>
               <div className="flex items-center space-x-1.5">
-                <span className="w-2 h-2 rounded-full bg-brand-gold" />
+                <span style={{ backgroundColor: vendorColor }} className="w-2 h-2 rounded-full" />
                 <h1 className="text-xs uppercase tracking-widest font-extrabold text-brand-gold">
                   LUKE BRASIL • MODO RUA
                 </h1>
               </div>
-              <p className="text-sm font-bold text-brand-offwhite">{vendorName}</p>
+              <div className="flex items-center space-x-2 mt-0.5">
+                <select
+                  value={selectedVendor}
+                  onChange={(e) => setSelectedVendor(e.target.value)}
+                  className="bg-transparent text-sm font-bold text-brand-offwhite focus:outline-none cursor-pointer"
+                >
+                  {AVAILABLE_VENDORS.map((v) => (
+                    <option key={v} value={v} className="bg-brand-graphite text-brand-offwhite">
+                      {v}
+                    </option>
+                  ))}
+                </select>
+                <VendorBadge vendorName={selectedVendor} color={vendorColor} size="xs" variant="solid" />
+              </div>
             </div>
           </div>
 
@@ -192,12 +218,22 @@ export default function LukeModoRuaPage() {
 
       {/* Conteúdo Mobile */}
       <main className="max-w-xl mx-auto px-4 pt-4 space-y-4">
-        {/* Card Resumo */}
-        <div className="bg-gradient-to-br from-brand-graphite to-brand-blue/20 rounded-2xl p-5 border border-brand-blue/30 shadow-lg">
+        {/* Card Resumo da Rota do Dia */}
+        <div className="bg-gradient-to-br from-brand-graphite to-brand-blue/20 rounded-2xl p-5 border border-brand-blue/30 shadow-lg relative overflow-hidden">
+          <div style={{ backgroundColor: vendorColor }} className="absolute top-0 left-0 right-0 h-1.5" />
+
           <div className="flex justify-between items-start mb-3">
             <div>
-              <p className="text-xs text-brand-offwhite/60 font-medium">Ciclo Atual (LUKE)</p>
-              <h2 className="text-lg font-bold text-brand-offwhite">{routeName}</h2>
+              <div className="flex items-center space-x-2 mb-1">
+                <span
+                  style={{ backgroundColor: vendorColor }}
+                  className="px-2 py-0.5 rounded text-[11px] font-mono font-black text-white"
+                >
+                  {currentRoute.code}
+                </span>
+                <span className="text-xs text-brand-offwhite/60 font-medium">Ciclo Atual (LUKE)</span>
+              </div>
+              <h2 className="text-base font-bold text-brand-offwhite">{currentRoute.name}</h2>
             </div>
             <div className="text-right">
               <p className="text-xs text-brand-offwhite/60 font-medium">Total Vendido</p>

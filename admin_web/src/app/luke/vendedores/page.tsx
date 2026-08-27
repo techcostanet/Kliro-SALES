@@ -18,11 +18,16 @@ import {
   MessageCircle,
   Eye,
   EyeOff,
+  Palette,
+  Calendar,
 } from "lucide-react";
 import { collection, getDocs, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { usePrivacy } from "@/lib/privacyContext";
 import { formatCurrency, formatPhoneBR, getWhatsAppLink } from "@/lib/formatters";
+import { VENDOR_COLOR_PALETTE, getVendorColor } from "@/lib/vendorColors";
+import VendorBadge from "@/components/VendorBadge";
+import Link from "next/link";
 
 export interface VendorItem {
   id: string;
@@ -30,10 +35,11 @@ export interface VendorItem {
   email: string;
   role: "VENDOR" | "ADMIN_VENDOR" | "ADMIN" | "SUPERVISOR";
   phone: string;
+  color: string; // Cor de identificação no calendário e sistema
   vehicle: string;
   vehiclePlate: string;
   commissionRate: number;
-  assignedRoutes: string[];
+  assignedRoutes?: string[]; // Prefixos ou rotas habituais (opcional)
   monthlyTarget: number;
   status: "ACTIVE" | "INACTIVE";
   notes?: string;
@@ -46,13 +52,14 @@ const INITIAL_VENDORS: VendorItem[] = [
     email: "alisson@luke.com",
     role: "VENDOR",
     phone: "(31) 98744-1234",
+    color: "#10b981", // Verde Esmeralda (Rotas R)
     vehicle: "Chevrolet Montana",
     vehiclePlate: "HMN-8840",
     commissionRate: 8.0,
     assignedRoutes: ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10", "R11", "R12"],
     monthlyTarget: 45000.0,
     status: "ACTIVE",
-    notes: "Vendedor de rota principal LUKE Brasil.",
+    notes: "Vendedor de rota principal LUKE Brasil (Rotas prefixo R).",
   },
   {
     id: "usr-002",
@@ -60,13 +67,14 @@ const INITIAL_VENDORS: VendorItem[] = [
     email: "alexandre@luke.com",
     role: "VENDOR",
     phone: "(31) 99123-5566",
+    color: "#0ea5e9", // Azul Céu (Rotas F)
     vehicle: "Renault Clio Express",
     vehiclePlate: "KLU-9921",
     commissionRate: 8.0,
-    assignedRoutes: ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"],
+    assignedRoutes: ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12", "G1", "G2"],
     monthlyTarget: 40000.0,
     status: "ACTIVE",
-    notes: "Atendimento rotas F.",
+    notes: "Atendimento rotas prefixo F e Grande BH.",
   },
   {
     id: "usr-003",
@@ -74,13 +82,14 @@ const INITIAL_VENDORS: VendorItem[] = [
     email: "lucas@luke.com",
     role: "ADMIN_VENDOR",
     phone: "(31) 98888-0001",
+    color: "#8b5cf6", // Violeta (Especial / Diretoria)
     vehicle: "Fiat Strada Freedom",
     vehiclePlate: "LUK-2025",
     commissionRate: 10.0,
-    assignedRoutes: ["R1", "R2", "F1", "Representante"],
+    assignedRoutes: ["REP", "R1", "F1"],
     monthlyTarget: 50000.0,
     status: "ACTIVE",
-    notes: "Diretor Comercial e Vendedor.",
+    notes: "Diretor Comercial e Vendedor Contas Chave.",
   },
   {
     id: "usr-004",
@@ -88,6 +97,7 @@ const INITIAL_VENDORS: VendorItem[] = [
     email: "sabrina@luke.com",
     role: "ADMIN",
     phone: "(31) 97777-1111",
+    color: "#f59e0b", // Âmbar (Administrativo)
     vehicle: "Operacional Base",
     vehiclePlate: "---",
     commissionRate: 0.0,
@@ -116,10 +126,11 @@ export default function LukeVendedoresPage() {
     email: "",
     role: "VENDOR",
     phone: "",
+    color: "#10b981",
     vehicle: "Fiat Strada",
     vehiclePlate: "LUK-1234",
     commissionRate: 8.0,
-    assignedRoutes: ["R1", "R2"],
+    assignedRoutes: ["R"],
     monthlyTarget: 40000.0,
     status: "ACTIVE",
     notes: "",
@@ -142,10 +153,11 @@ export default function LukeVendedoresPage() {
             email: d.email || "",
             role: d.role || "VENDOR",
             phone: d.phone || "",
+            color: d.color || getVendorColor(d.name),
             vehicle: d.vehicle || "Veículo Comercial",
             vehiclePlate: d.vehiclePlate || "---",
             commissionRate: Number(d.commissionRate || 8),
-            assignedRoutes: Array.isArray(d.assignedRoutes) ? d.assignedRoutes : [d.assignedRoutes || "R1"],
+            assignedRoutes: Array.isArray(d.assignedRoutes) ? d.assignedRoutes : [d.assignedRoutes || "R"],
             monthlyTarget: Number(d.monthlyTarget || 35000),
             status: d.status || "ACTIVE",
             notes: d.notes || "",
@@ -176,7 +188,7 @@ export default function LukeVendedoresPage() {
           { merge: true }
         );
       }
-      setSyncMessage("✅ Equipe sincronizada com o Firestore com sucesso!");
+      setSyncMessage("✅ Equipe e cores sincronizadas com o Firestore com sucesso!");
       setTimeout(() => setSyncMessage(null), 4000);
     } catch (err: any) {
       setSyncMessage(`❌ Erro ao sincronizar: ${err?.message}`);
@@ -192,7 +204,7 @@ export default function LukeVendedoresPage() {
         v.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         v.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
         v.vehicle.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        v.assignedRoutes.join(" ").toLowerCase().includes(searchTerm.toLowerCase());
+        (v.assignedRoutes && v.assignedRoutes.join(" ").toLowerCase().includes(searchTerm.toLowerCase()));
 
       const matchRole =
         selectedRoleFilter === "ALL" || v.role === selectedRoleFilter;
@@ -214,10 +226,11 @@ export default function LukeVendedoresPage() {
         email: "",
         role: "VENDOR",
         phone: "",
+        color: VENDOR_COLOR_PALETTE[vendors.length % VENDOR_COLOR_PALETTE.length].hex,
         vehicle: "Fiat Strada",
         vehiclePlate: "LUK-1234",
         commissionRate: 8.0,
-        assignedRoutes: ["R1", "R2"],
+        assignedRoutes: ["R"],
         monthlyTarget: 40000.0,
         status: "ACTIVE",
         notes: "",
@@ -236,12 +249,13 @@ export default function LukeVendedoresPage() {
       email: formData.email.trim(),
       role: formData.role || "VENDOR",
       phone: formData.phone || "",
+      color: formData.color || getVendorColor(formData.name),
       vehicle: formData.vehicle || "Veículo Comercial",
       vehiclePlate: formData.vehiclePlate || "---",
       commissionRate: Number(formData.commissionRate || 8),
       assignedRoutes: Array.isArray(formData.assignedRoutes)
         ? formData.assignedRoutes
-        : [formData.assignedRoutes || "R1"],
+        : [formData.assignedRoutes || "R"],
       monthlyTarget: Number(formData.monthlyTarget || 35000),
       status: formData.status || "ACTIVE",
       notes: formData.notes || "",
@@ -305,17 +319,26 @@ export default function LukeVendedoresPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <div className="flex items-center space-x-3">
-            <h2 className="text-3xl font-extrabold text-brand-offwhite">Vendedores</h2>
+            <h2 className="text-3xl font-extrabold text-brand-offwhite">Vendedores & Equipe</h2>
             <span className="bg-brand-gold/20 text-brand-gold text-xs px-2.5 py-1 rounded-full font-bold border border-brand-gold/30">
               {vendors.length} integrantes
             </span>
           </div>
           <p className="text-brand-offwhite/60 text-sm mt-1">
-            Gestão completa de vendedores de rua, comissões, rotas e supervisão da LUKE Brasil.
+            Gestão completa da equipe, comissões, metas e cores personalizadas para a Agenda de Rotas.
           </p>
         </div>
 
         <div className="flex items-center space-x-2 w-full sm:w-auto">
+          {/* Atalho para Agenda de Rotas */}
+          <Link
+            href="/luke/rotas"
+            className="flex items-center space-x-1.5 px-3 py-2.5 rounded-xl text-xs font-bold bg-brand-blue/30 text-brand-offwhite border border-brand-blue/50 hover:bg-brand-blue/50 transition shadow-xs"
+          >
+            <Calendar size={15} className="text-brand-gold" />
+            <span className="hidden sm:inline">Agenda de Rotas</span>
+          </Link>
+
           {/* Botão de Alternar Modo Privacidade */}
           <button
             onClick={togglePrivacy}
@@ -363,10 +386,10 @@ export default function LukeVendedoresPage() {
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md">
           <div className="flex items-center justify-between">
             <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Equipe</span>
-            <Users size={18} className="text-green-400" />
+            <Users size={18} className="text-emerald-400" />
           </div>
-          <p className="text-2xl font-black text-green-400 mt-2">{activeVendors} ativos</p>
-          <span className="text-[11px] text-brand-offwhite/50">Em campo e base</span>
+          <p className="text-2xl font-black text-emerald-400 mt-2">{activeVendors} ativos</p>
+          <span className="text-[11px] text-brand-offwhite/50">Em campo e base operacional</span>
         </div>
 
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md">
@@ -393,7 +416,7 @@ export default function LukeVendedoresPage() {
 
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Comissão Padrão</span>
+            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Comissão Média</span>
             <DollarSign size={18} className="text-emerald-400" />
           </div>
           <p className="text-2xl font-black text-emerald-400 mt-2">8,0%</p>
@@ -436,10 +459,10 @@ export default function LukeVendedoresPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-brand-blue/10 border-b border-brand-blue/30 text-brand-offwhite/70 text-xs uppercase tracking-wider">
-                <th className="p-4 font-medium">Nome & WhatsApp</th>
+                <th className="p-4 font-medium">Vendedor & Cor</th>
                 <th className="p-4 font-medium">Função</th>
                 <th className="p-4 font-medium">Veículo</th>
-                <th className="p-4 font-medium">Rotas</th>
+                <th className="p-4 font-medium">Prefixos Habituais</th>
                 <th className="p-4 font-medium">Comissão</th>
                 <th className="p-4 font-medium">Meta</th>
                 <th className="p-4 font-medium">Status</th>
@@ -447,126 +470,141 @@ export default function LukeVendedoresPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-brand-blue/10 text-sm">
-              {filtered.map((user) => (
-                <tr key={user.id} className="hover:bg-brand-blue/5 transition group">
-                  <td className="p-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 rounded-full bg-brand-blue/30 border border-brand-blue/50 flex items-center justify-center text-brand-gold shrink-0">
-                        {user.role === "ADMIN" || user.role === "ADMIN_VENDOR" ? (
-                          <Shield size={18} />
-                        ) : (
-                          <User size={18} />
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-brand-offwhite font-bold">{user.name}</p>
-                        <p className="text-xs text-brand-offwhite/50">{user.email}</p>
-                        <div className="mt-0.5">
-                          {user.phone ? (
-                            <a
-                              href={getWhatsAppLink(user.phone)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center space-x-1 text-[11px] text-green-400 font-mono hover:underline font-bold"
-                            >
-                              <MessageCircle size={11} className="text-green-400" />
-                              <span>{formatPhoneBR(user.phone)}</span>
-                            </a>
-                          ) : (
-                            <span className="text-[11px] text-brand-offwhite/40 italic">Sem WhatsApp</span>
-                          )}
+              {filtered.map((user) => {
+                const userColor = user.color || getVendorColor(user.name);
+                return (
+                  <tr key={user.id} className="hover:bg-brand-blue/5 transition group">
+                    <td className="p-4">
+                      <div className="flex items-center space-x-3">
+                        <div
+                          style={{ borderColor: userColor }}
+                          className="w-10 h-10 rounded-full bg-brand-black/60 border-2 flex items-center justify-center font-black text-white shrink-0 shadow-sm relative"
+                        >
+                          <span style={{ color: userColor }}>
+                            {user.name ? user.name.charAt(0).toUpperCase() : "V"}
+                          </span>
+                          <span
+                            style={{ backgroundColor: userColor }}
+                            className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border border-brand-graphite"
+                          />
+                        </div>
+                        <div>
+                          <div className="flex items-center space-x-2">
+                            <p className="text-brand-offwhite font-bold">{user.name}</p>
+                            <VendorBadge vendorName={user.name} color={userColor} size="xs" variant="chip" />
+                          </div>
+                          <p className="text-xs text-brand-offwhite/50">{user.email}</p>
+                          <div className="mt-0.5">
+                            {user.phone ? (
+                              <a
+                                href={getWhatsAppLink(user.phone)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center space-x-1 text-[11px] text-green-400 font-mono hover:underline font-bold"
+                              >
+                                <MessageCircle size={11} className="text-green-400" />
+                                <span>{formatPhoneBR(user.phone)}</span>
+                              </a>
+                            ) : (
+                              <span className="text-[11px] text-brand-offwhite/40 italic">Sem WhatsApp</span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </td>
+                    </td>
 
-                  <td className="p-4">
-                    <span
-                      className={`text-xs px-2.5 py-1 rounded-md font-semibold ${
-                        user.role === "ADMIN_VENDOR"
-                          ? "bg-brand-gold/20 text-brand-gold border border-brand-gold/30"
+                    <td className="p-4">
+                      <span
+                        className={`text-xs px-2.5 py-1 rounded-md font-semibold ${
+                          user.role === "ADMIN_VENDOR"
+                            ? "bg-brand-gold/20 text-brand-gold border border-brand-gold/30"
+                            : user.role === "ADMIN"
+                            ? "bg-purple-500/20 text-purple-300 border border-purple-500/30"
+                            : "bg-blue-500/20 text-blue-300 border border-blue-500/30"
+                        }`}
+                      >
+                        {user.role === "ADMIN_VENDOR"
+                          ? "Admin & Vendedor"
                           : user.role === "ADMIN"
-                          ? "bg-purple-500/20 text-purple-300 border border-purple-500/30"
-                          : "bg-blue-500/20 text-blue-300 border border-blue-500/30"
-                      }`}
-                    >
-                      {user.role === "ADMIN_VENDOR"
-                        ? "Admin & Vendedor"
-                        : user.role === "ADMIN"
-                        ? "Administração"
-                        : user.role === "SUPERVISOR"
-                        ? "Supervisor"
-                        : "Vendedor"}
-                    </span>
-                  </td>
+                          ? "Administração"
+                          : user.role === "SUPERVISOR"
+                          ? "Supervisor"
+                          : "Vendedor"}
+                      </span>
+                    </td>
 
-                  <td className="p-4 text-xs text-brand-offwhite/80">
-                    <div className="flex items-center space-x-1.5">
-                      <Truck size={14} className="text-brand-gold/70 shrink-0" />
-                      <span>{user.vehicle}</span>
-                    </div>
-                    <span className="text-[11px] text-brand-offwhite/40 font-mono pl-5">
-                      {user.vehiclePlate}
-                    </span>
-                  </td>
+                    <td className="p-4 text-xs text-brand-offwhite/80">
+                      <div className="flex items-center space-x-1.5">
+                        <Truck size={14} className="text-brand-gold/70 shrink-0" />
+                        <span>{user.vehicle}</span>
+                      </div>
+                      <span className="text-[11px] text-brand-offwhite/40 font-mono pl-5">
+                        {user.vehiclePlate}
+                      </span>
+                    </td>
 
-                  <td className="p-4">
-                    <div className="flex flex-wrap gap-1 max-w-[160px]">
-                      {user.assignedRoutes.slice(0, 4).map((r) => (
-                        <span
-                          key={r}
-                          className="px-1.5 py-0.5 bg-brand-black text-brand-offwhite/80 text-[10px] rounded border border-brand-blue/30 font-mono"
-                        >
-                          {r}
-                        </span>
-                      ))}
-                      {user.assignedRoutes.length > 4 && (
-                        <span className="text-[10px] text-brand-gold font-bold">
-                          +{user.assignedRoutes.length - 4}
-                        </span>
-                      )}
-                    </div>
-                  </td>
+                    <td className="p-4">
+                      <div className="flex flex-wrap gap-1 max-w-[170px]">
+                        {user.assignedRoutes && user.assignedRoutes.length > 0 ? (
+                          user.assignedRoutes.slice(0, 4).map((r) => (
+                            <span
+                              key={r}
+                              className="px-1.5 py-0.5 bg-brand-black text-brand-offwhite/80 text-[10px] rounded border border-brand-blue/30 font-mono font-bold"
+                            >
+                              {r}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-[11px] text-brand-offwhite/40 italic">Via Agenda</span>
+                        )}
+                        {user.assignedRoutes && user.assignedRoutes.length > 4 && (
+                          <span className="text-[10px] text-brand-gold font-bold">
+                            +{user.assignedRoutes.length - 4}
+                          </span>
+                        )}
+                      </div>
+                    </td>
 
-                  <td className="p-4 font-mono font-bold text-emerald-400 text-xs">
-                    {user.commissionRate > 0 ? `${user.commissionRate.toFixed(1)}%` : "Fixo"}
-                  </td>
+                    <td className="p-4 font-mono font-bold text-emerald-400 text-xs">
+                      {user.commissionRate > 0 ? `${user.commissionRate.toFixed(1)}%` : "Fixo"}
+                    </td>
 
-                  <td className="p-4 font-bold text-brand-offwhite text-xs font-mono">
-                    {user.monthlyTarget > 0 ? formatValue(user.monthlyTarget, "currency") : "---"}
-                  </td>
+                    <td className="p-4 font-bold text-brand-offwhite text-xs font-mono">
+                      {user.monthlyTarget > 0 ? formatValue(user.monthlyTarget, "currency") : "---"}
+                    </td>
 
-                  <td className="p-4">
-                    <button
-                      onClick={() => handleToggleStatus(user)}
-                      className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border transition ${
-                        user.status === "ACTIVE"
-                          ? "bg-green-500/10 text-green-400 border-green-500/20 hover:bg-green-500/20"
-                          : "bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/20"
-                      }`}
-                    >
-                      {user.status === "ACTIVE" ? "Ativo" : "Inativo"}
-                    </button>
-                  </td>
+                    <td className="p-4">
+                      <button
+                        onClick={() => handleToggleStatus(user)}
+                        className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border transition ${
+                          user.status === "ACTIVE"
+                            ? "bg-green-500/10 text-green-400 border-green-500/20 hover:bg-green-500/20"
+                            : "bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/20"
+                        }`}
+                      >
+                        {user.status === "ACTIVE" ? "Ativo" : "Inativo"}
+                      </button>
+                    </td>
 
-                  <td className="p-4 text-right space-x-2 whitespace-nowrap">
-                    <button
-                      onClick={() => handleOpenModal(user)}
-                      title="Editar Vendedor"
-                      className="text-brand-offwhite/50 hover:text-brand-gold p-1.5 rounded-lg hover:bg-brand-blue/10 transition"
-                    >
-                      <Edit2 size={16} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(user.id)}
-                      title="Excluir"
-                      className="text-brand-offwhite/50 hover:text-red-400 p-1.5 rounded-lg hover:bg-brand-blue/10 transition"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    <td className="p-4 text-right space-x-2 whitespace-nowrap">
+                      <button
+                        onClick={() => handleOpenModal(user)}
+                        title="Editar Vendedor"
+                        className="text-brand-offwhite/50 hover:text-brand-gold p-1.5 rounded-lg hover:bg-brand-blue/10 transition"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(user.id)}
+                        title="Excluir"
+                        className="text-brand-offwhite/50 hover:text-red-400 p-1.5 rounded-lg hover:bg-brand-blue/10 transition"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -592,7 +630,7 @@ export default function LukeVendedoresPage() {
                   {editingVendor ? "Editar Vendedor" : "Novo Vendedor"}
                 </h3>
                 <p className="text-xs text-brand-offwhite/60">
-                  Defina os acessos, veículo, rotas de atendimento e comissões.
+                  Configure os dados, cor de identificação na agenda, veículo e metas.
                 </p>
               </div>
             </div>
@@ -628,6 +666,54 @@ export default function LukeVendedoresPage() {
                 </div>
               </div>
 
+              {/* Seletor de Cor do Vendedor (Google Agenda Style) */}
+              <div className="p-3.5 bg-brand-black/60 rounded-xl border border-brand-blue/30 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center space-x-1.5 text-xs font-bold text-brand-gold uppercase tracking-wider">
+                    <Palette size={14} />
+                    <span>Cor de Identificação no Sistema & Agenda</span>
+                  </label>
+                  <VendorBadge
+                    vendorName={formData.name || "Preview"}
+                    color={formData.color}
+                    size="xs"
+                    variant="solid"
+                  />
+                </div>
+
+                <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
+                  {VENDOR_COLOR_PALETTE.map((c) => {
+                    const isSelected = formData.color === c.hex;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, color: c.hex })}
+                        style={{ backgroundColor: c.hex }}
+                        className={`h-8 rounded-lg flex items-center justify-center transition shadow-sm relative ${
+                          isSelected
+                            ? "ring-2 ring-white ring-offset-2 ring-offset-brand-graphite scale-105"
+                            : "opacity-80 hover:opacity-100"
+                        }`}
+                        title={c.name}
+                      >
+                        {isSelected && <CheckCircle2 size={15} className="text-white drop-shadow" />}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center space-x-2 pt-1">
+                  <span className="text-[11px] text-brand-offwhite/50">Código Hex:</span>
+                  <input
+                    type="text"
+                    value={formData.color || "#10b981"}
+                    onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                    className="w-28 px-2 py-1 bg-brand-black border border-brand-blue/40 rounded text-xs font-mono text-brand-offwhite uppercase"
+                    placeholder="#10B981"
+                  />
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
@@ -651,7 +737,7 @@ export default function LukeVendedoresPage() {
                     onChange={(e: any) => setFormData({ ...formData, role: e.target.value })}
                     className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold"
                   >
-                    <option value="VENDOR">Vendedor</option>
+                    <option value="VENDOR">Vendedor de Rua</option>
                     <option value="ADMIN_VENDOR">Admin & Vendedor</option>
                     <option value="ADMIN">Administrador</option>
                     <option value="SUPERVISOR">Supervisor</option>
@@ -714,10 +800,14 @@ export default function LukeVendedoresPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                  Rotas Atendidas (Separadas por vírgula)
-                </label>
+              {/* Informação sobre Rotas Dinâmicas (Áudio 6) */}
+              <div className="p-3 bg-brand-blue/10 border border-brand-blue/30 rounded-xl space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-brand-offwhite/90">
+                    Prefixos ou Rotas Habituais (Opcional)
+                  </label>
+                  <span className="text-[10px] text-brand-gold font-semibold uppercase">Gestão Dinâmica</span>
+                </div>
                 <input
                   type="text"
                   value={Array.isArray(formData.assignedRoutes) ? formData.assignedRoutes.join(", ") : formData.assignedRoutes || ""}
@@ -727,9 +817,12 @@ export default function LukeVendedoresPage() {
                       assignedRoutes: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
                     })
                   }
-                  className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold font-mono"
-                  placeholder="Ex: R1, R2, R3, R4"
+                  className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-xs text-brand-offwhite focus:outline-none focus:border-brand-gold font-mono"
+                  placeholder="Ex: R (Rotas R1 a R12), F, REP"
                 />
+                <p className="text-[11px] text-brand-offwhite/50">
+                  💡 A atribuição de dias específicos e rotas é realizada dinamicamente através da <strong>Agenda de Rotas</strong>.
+                </p>
               </div>
 
               <div>
