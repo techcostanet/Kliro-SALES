@@ -4,6 +4,26 @@ Todas as melhorias, novidades e correções notáveis deste projeto serão docum
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-08-26
+### Added
+- **Modo Privacidade / Ocultar Valores Ativo por Padrão (`PrivacyContext`)**:
+  - Valores monetários agora são ocultados por padrão no sistema (`R$ ••••••`) para evitar visualização indevida durante atendimentos.
+  - Botão de alternância rápida (*Eye / EyeOff*) na barra lateral e nos cabeçalhos dos módulos.
+- **Configurações da Empresa & Logomarca (`/luke/empresa`)**:
+  - Nova página dedicada para o cliente cadastrar e editar a logomarca da empresa com pré-visualização instantânea.
+  - Dados fiscais completos (Razão Social, Nome Fantasia, CNPJ, Inscrição Estadual, Responsáveis, WhatsApp e Telefones centrais).
+  - Endereço central estruturado da distribuidora e cadastro de Chave Pix para recebimento das rotas.
+- **Até 5 Compradores com Link Direto para WhatsApp (`/luke/clientes`)**:
+  - Suporte ao cadastro dinâmico de até 5 compradores por salão / barbearia.
+  - Botão de atalho que redireciona diretamente para o WhatsApp oficial de cada comprador (`https://wa.me/...`).
+- **Endereço Completo Estruturado (`/luke/clientes`)**:
+  - Campos separados de CEP, Logradouro, Número, Complemento, Bairro, Cidade, UF e Ponto de Referência para relatórios e logística avançada.
+- **Gestão Completa de Rotas (`/luke/rotas`)**:
+  - Botão "Nova Rota" corrigido e operacional com modal completo para criação e edição de rotas, códigos (ex: R1, F1), vendedor responsável, dia da semana e sincronização com o Firestore.
+### Changed
+- **Padronização e Limpeza de Rótulos para Palavra Única**:
+  - Simplificação de menus e cabeçalhos em todo o sistema (*Visão, Clientes, Rotas, Cargas, Financeiro, Transações, Vendedores, Produtos, Empresa, Rua*), tornando a interface mais limpa e direta.
+
 ## [1.4.0] - 2026-08-26
 ### Added
 - **Multi-Marcas & Gestão de Imagens no Catálogo de Produtos (`/luke/produtos`)**:

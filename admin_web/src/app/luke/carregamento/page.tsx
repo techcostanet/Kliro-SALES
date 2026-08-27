@@ -15,8 +15,11 @@ import {
   Layers,
   TrendingUp,
   FileSpreadsheet,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import initialProducts from "@/lib/products_catalog.json";
+import { usePrivacy } from "@/lib/privacyContext";
 
 interface LoadingItem {
   productId: string;
@@ -40,6 +43,7 @@ interface LoadingCycle {
 }
 
 export default function CarregamentoPage() {
+  const { hideValues, togglePrivacy, formatValue } = usePrivacy();
   const [selectedTab, setSelectedTab] = useState<number | "MONTHLY_SUMMARY">(1);
   const [selectedVendor, setSelectedVendor] = useState("Alisson");
   const [searchTerm, setSearchTerm] = useState("");
@@ -50,7 +54,7 @@ export default function CarregamentoPage() {
     for (let i = 1; i <= 20; i++) {
       initial[i] = {
         id: i,
-        title: `Carregamento ${i}`,
+        title: `Carga ${i}`,
         date: new Date().toISOString().split("T")[0],
         vendor: "Alisson",
         approved: false,
@@ -72,7 +76,7 @@ export default function CarregamentoPage() {
     setCycles((prev) => {
       const cycle = prev[cycleId] || {
         id: cycleId,
-        title: `Carregamento ${cycleId}`,
+        title: `Carga ${cycleId}`,
         date: new Date().toISOString().split("T")[0],
         vendor: selectedVendor,
         approved: false,
@@ -104,9 +108,11 @@ export default function CarregamentoPage() {
     });
   };
 
+  // Toggle de aprovação de item individual
   const handleToggleItemApproval = (cycleId: number, productId: string) => {
     setCycles((prev) => {
       const cycle = prev[cycleId];
+      if (!cycle) return prev;
       const itemData = cycle.items[productId] || {
         requested: 0,
         loaded: 0,
@@ -130,27 +136,33 @@ export default function CarregamentoPage() {
     });
   };
 
+  // Toggle aprovação do ciclo completo
   const handleToggleCycleApproval = (cycleId: number) => {
-    setCycles((prev) => ({
-      ...prev,
-      [cycleId]: {
-        ...prev[cycleId],
-        approved: !prev[cycleId].approved,
-      },
-    }));
+    setCycles((prev) => {
+      const cycle = prev[cycleId];
+      if (!cycle) return prev;
+      return {
+        ...prev,
+        [cycleId]: {
+          ...cycle,
+          approved: !cycle.approved,
+        },
+      };
+    });
   };
 
-  // Produtos filtrados
+  // Filtragem de produtos
   const filteredProducts = useMemo(() => {
-    return initialProducts.filter(
-      (p) =>
+    return initialProducts.filter((p) => {
+      const matchesSearch =
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.code.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+        p.code.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesSearch;
+    });
   }, [searchTerm]);
 
-  // Cálculos do ciclo ativo
+  // Cálculos do ciclo atual
   const cycleTotals = useMemo(() => {
     if (!currentCycle) return { requested: 0, loaded: 0, returned: 0, net: 0, totalValue: 0 };
     let req = 0,
@@ -160,27 +172,29 @@ export default function CarregamentoPage() {
       val = 0;
 
     initialProducts.forEach((p) => {
-      const item = currentCycle.items[p.id] || { requested: 0, loaded: 0, returned: 0 };
-      const itemNet = Math.max(0, (item.loaded || 0) - (item.returned || 0));
-      req += item.requested || 0;
-      load += item.loaded || 0;
-      ret += item.returned || 0;
-      net += itemNet;
-      val += itemNet * p.price;
+      const item = currentCycle.items[p.id];
+      if (item) {
+        req += item.requested || 0;
+        load += item.loaded || 0;
+        ret += item.returned || 0;
+        const itemNet = Math.max(0, (item.loaded || 0) - (item.returned || 0));
+        net += itemNet;
+        val += itemNet * p.price;
+      }
     });
 
     return { requested: req, loaded: load, returned: ret, net, totalValue: val };
   }, [currentCycle]);
 
-  // Cálculos do Resumo do Mês (soma de todas as 20 abas)
+  // Resumo Consolidado do Mês (Todos os 20 Ciclos)
   const monthlySummary = useMemo(() => {
-    return initialProducts.map((p) => {
+    return initialProducts.map((product) => {
       let totalRequested = 0;
       let totalLoaded = 0;
       let totalReturned = 0;
 
       for (let i = 1; i <= 20; i++) {
-        const item = cycles[i]?.items[p.id];
+        const item = cycles[i]?.items[product.id];
         if (item) {
           totalRequested += item.requested || 0;
           totalLoaded += item.loaded || 0;
@@ -189,10 +203,10 @@ export default function CarregamentoPage() {
       }
 
       const netDistributed = Math.max(0, totalLoaded - totalReturned);
-      const totalAmount = netDistributed * p.price;
+      const totalAmount = netDistributed * product.price;
 
       return {
-        ...p,
+        ...product,
         totalRequested,
         totalLoaded,
         totalReturned,
@@ -220,15 +234,13 @@ export default function CarregamentoPage() {
 
   return (
     <div className="space-y-8">
-      {/* Header */}
+      {/* Header com Nomes de 1 Palavra */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <div className="flex items-center space-x-3">
-            <h2 className="text-3xl font-extrabold text-brand-offwhite">
-              Controle de Carregamento & Cargas
-            </h2>
+            <h2 className="text-3xl font-extrabold text-brand-offwhite">Cargas</h2>
             <span className="bg-brand-gold/20 text-brand-gold text-xs px-2.5 py-1 rounded-full font-bold border border-brand-gold/30">
-              V1 Digital
+              Frota LUKE
             </span>
           </div>
           <p className="text-brand-offwhite/60 text-sm mt-1">
@@ -236,13 +248,27 @@ export default function CarregamentoPage() {
           </p>
         </div>
 
-        <div className="flex items-center space-x-3 w-full sm:w-auto">
+        <div className="flex items-center space-x-2 w-full sm:w-auto">
+          {/* Botão de Alternar Modo Privacidade */}
+          <button
+            onClick={togglePrivacy}
+            className={`flex items-center space-x-1.5 px-3 py-2.5 rounded-xl text-xs font-bold border transition ${
+              hideValues
+                ? "bg-brand-gold/20 text-brand-gold border-brand-gold/40"
+                : "bg-brand-graphite text-brand-offwhite/70 border-brand-blue/30 hover:text-brand-offwhite"
+            }`}
+            title={hideValues ? "Mostrar Valores" : "Ocultar Valores"}
+          >
+            {hideValues ? <EyeOff size={16} /> : <Eye size={16} />}
+            <span>{hideValues ? "Oculto" : "Visível"}</span>
+          </button>
+
           <button
             onClick={() => window.print()}
-            className="flex items-center space-x-2 bg-brand-blue/30 border border-brand-blue/50 text-brand-offwhite hover:bg-brand-blue/50 px-4 py-2.5 rounded-xl font-semibold transition text-sm shadow-md"
+            className="flex items-center space-x-1.5 bg-brand-blue/30 border border-brand-blue/50 text-brand-offwhite hover:bg-brand-blue/50 px-3.5 py-2.5 rounded-xl font-semibold transition text-xs shadow-md"
           >
-            <Printer size={16} className="text-brand-gold" />
-            <span>Imprimir Ficha</span>
+            <Printer size={15} className="text-brand-gold" />
+            <span>Imprimir</span>
           </button>
         </div>
       </div>
@@ -251,7 +277,7 @@ export default function CarregamentoPage() {
       <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-lg grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
           <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-            Vendedor Responsável
+            Vendedor
           </label>
           <div className="flex items-center space-x-2">
             <User size={18} className="text-brand-gold shrink-0" />
@@ -269,14 +295,14 @@ export default function CarregamentoPage() {
 
         <div>
           <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-            Data de Referência
+            Data
           </label>
           <div className="flex items-center space-x-2">
             <Calendar size={18} className="text-brand-gold shrink-0" />
             <input
               type="date"
               defaultValue={new Date().toISOString().split("T")[0]}
-              className="w-full bg-brand-black border border-brand-blue/50 text-brand-offwhite rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-gold"
+              className="w-full bg-brand-black border border-brand-blue/50 text-brand-offwhite rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-gold font-mono"
             />
           </div>
         </div>
@@ -292,13 +318,13 @@ export default function CarregamentoPage() {
               }`}
             >
               <CheckCircle2 size={18} />
-              <span>{currentCycle.approved ? "Carga Aprovada" : "Aprovar Carregamento"}</span>
+              <span>{currentCycle.approved ? "Carga Aprovada" : "Aprovar Carga"}</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* Tabs de Seleção: Carregamentos 1 a 20 + Resumo do Mês */}
+      {/* Tabs de Seleção: Cargas 1 a 20 + Resumo */}
       <div className="flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-thin">
         {Array.from({ length: 20 }, (_, i) => i + 1).map((cycleNum) => {
           const isSelected = selectedTab === cycleNum;
@@ -334,15 +360,15 @@ export default function CarregamentoPage() {
           }`}
         >
           <FileSpreadsheet size={15} />
-          <span>Resumo Consolidado do Mês</span>
+          <span>Resumo</span>
         </button>
       </div>
 
-      {/* Cards de Métricas da Carga Ativa ou Consolidado */}
+      {/* Cards de Métricas */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="bg-brand-graphite p-4 rounded-xl border border-brand-blue/30">
           <span className="text-[11px] text-brand-offwhite/60 font-semibold uppercase">
-            Qtd. Solicitada
+            Pedido
           </span>
           <p className="text-xl font-black text-brand-offwhite mt-1">
             {selectedTab === "MONTHLY_SUMMARY" ? monthlyTotals.requested : cycleTotals.requested} un
@@ -351,7 +377,7 @@ export default function CarregamentoPage() {
 
         <div className="bg-brand-graphite p-4 rounded-xl border border-brand-blue/30">
           <span className="text-[11px] text-brand-offwhite/60 font-semibold uppercase">
-            Qtd. Carregada
+            Carregado
           </span>
           <p className="text-xl font-black text-blue-400 mt-1">
             {selectedTab === "MONTHLY_SUMMARY" ? monthlyTotals.loaded : cycleTotals.loaded} un
@@ -360,7 +386,7 @@ export default function CarregamentoPage() {
 
         <div className="bg-brand-graphite p-4 rounded-xl border border-brand-blue/30">
           <span className="text-[11px] text-brand-offwhite/60 font-semibold uppercase">
-            Qtd. Devolvida
+            Retorno
           </span>
           <p className="text-xl font-black text-amber-400 mt-1">
             {selectedTab === "MONTHLY_SUMMARY" ? monthlyTotals.returned : cycleTotals.returned} un
@@ -369,7 +395,7 @@ export default function CarregamentoPage() {
 
         <div className="bg-brand-graphite p-4 rounded-xl border border-brand-blue/30">
           <span className="text-[11px] text-brand-offwhite/60 font-semibold uppercase">
-            Distribuído Líquido
+            Líquido
           </span>
           <p className="text-xl font-black text-green-400 mt-1">
             {selectedTab === "MONTHLY_SUMMARY" ? monthlyTotals.net : cycleTotals.net} un
@@ -378,18 +404,15 @@ export default function CarregamentoPage() {
 
         <div className="bg-brand-graphite p-4 rounded-xl border border-brand-blue/30 col-span-2 md:col-span-1">
           <span className="text-[11px] text-brand-offwhite/60 font-semibold uppercase">
-            Valor Distribuído (R$)
+            Valor
           </span>
           <p className="text-xl font-black text-brand-gold mt-1">
-            R${" "}
-            {(selectedTab === "MONTHLY_SUMMARY" ? monthlyTotals.totalValue : cycleTotals.totalValue)
-              .toFixed(2)
-              .replace(".", ",")}
+            {formatValue(selectedTab === "MONTHLY_SUMMARY" ? monthlyTotals.totalValue : cycleTotals.totalValue)}
           </p>
         </div>
       </div>
 
-      {/* Conteúdo Principal: Tabela de Carregamento Diário ou Consolidado */}
+      {/* Tabela de Carga */}
       <div className="bg-brand-graphite rounded-2xl border border-brand-blue/30 shadow-xl overflow-hidden">
         {/* Barra de Busca */}
         <div className="p-4 border-b border-brand-blue/30 flex justify-between items-center bg-brand-black/50">
@@ -405,23 +428,22 @@ export default function CarregamentoPage() {
           </div>
 
           <span className="text-xs text-brand-offwhite/60 font-mono">
-            {filteredProducts.length} de {initialProducts.length} itens
+            {filteredProducts.length} itens
           </span>
         </div>
 
         {/* Tabela */}
         <div className="overflow-x-auto">
           {selectedTab !== "MONTHLY_SUMMARY" ? (
-            // VISÃO DA CARGA INDIVIDUAL (1 A 20)
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-brand-blue/10 border-b border-brand-blue/30 text-brand-offwhite/70 text-xs uppercase tracking-wider">
-                  <th className="p-3.5 font-medium text-center w-12">Aprov.</th>
-                  <th className="p-3.5 font-medium">Listagem de Produtos (46 Itens)</th>
-                  <th className="p-3.5 font-medium text-center w-36">Qtd. Solicitada</th>
-                  <th className="p-3.5 font-medium text-center w-36">Qtd. Carregamento</th>
-                  <th className="p-3.5 font-medium text-center w-36">Devolução</th>
-                  <th className="p-3.5 font-medium text-right w-36">Distribuído Líquido</th>
+                  <th className="p-3.5 font-medium text-center w-12">Status</th>
+                  <th className="p-3.5 font-medium">Produto</th>
+                  <th className="p-3.5 font-medium text-center w-36">Pedido</th>
+                  <th className="p-3.5 font-medium text-center w-36">Carregado</th>
+                  <th className="p-3.5 font-medium text-center w-36">Retorno</th>
+                  <th className="p-3.5 font-medium text-right w-36">Líquido</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-brand-blue/10 text-sm">
@@ -455,7 +477,7 @@ export default function CarregamentoPage() {
                           </span>
                         </div>
                         <span className="text-[11px] text-brand-offwhite/40">
-                          {p.category} • R$ {p.price.toFixed(2).replace(".", ",")}
+                          {p.category} • {formatValue(p.price)}
                         </span>
                       </td>
 
@@ -531,7 +553,7 @@ export default function CarregamentoPage() {
               <tfoot>
                 <tr className="bg-brand-black/70 border-t-2 border-brand-gold/30 text-sm font-black">
                   <td colSpan={2} className="p-4 text-brand-gold uppercase tracking-wider">
-                    TOTAIS DO CARREGAMENTO {selectedTab}
+                    TOTAIS DA CARGA {selectedTab}
                   </td>
                   <td className="p-4 text-center font-mono text-brand-offwhite">
                     {cycleTotals.requested} un
@@ -554,11 +576,11 @@ export default function CarregamentoPage() {
               <thead>
                 <tr className="bg-brand-blue/10 border-b border-brand-blue/30 text-brand-offwhite/70 text-xs uppercase tracking-wider">
                   <th className="p-3.5 font-medium">Produto</th>
-                  <th className="p-3.5 font-medium text-center">Total Solicitado (20 Cargas)</th>
-                  <th className="p-3.5 font-medium text-center">Total Carregado</th>
-                  <th className="p-3.5 font-medium text-center">Total Devolvido</th>
-                  <th className="p-3.5 font-medium text-center">Distribuído Líquido</th>
-                  <th className="p-3.5 font-medium text-right">Faturamento Estimado</th>
+                  <th className="p-3.5 font-medium text-center">Pedido (20 Cargas)</th>
+                  <th className="p-3.5 font-medium text-center">Carregado</th>
+                  <th className="p-3.5 font-medium text-center">Retorno</th>
+                  <th className="p-3.5 font-medium text-center">Líquido</th>
+                  <th className="p-3.5 font-medium text-right">Valor Estimado</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-brand-blue/10 text-sm">
@@ -597,7 +619,7 @@ export default function CarregamentoPage() {
                       </td>
 
                       <td className="p-3.5 text-right font-mono text-brand-gold font-bold">
-                        R$ {p.totalAmount.toFixed(2).replace(".", ",")}
+                        {formatValue(p.totalAmount)}
                       </td>
                     </tr>
                   ))}
@@ -605,7 +627,7 @@ export default function CarregamentoPage() {
               <tfoot>
                 <tr className="bg-brand-black/80 border-t-2 border-brand-gold/40 text-sm font-black">
                   <td className="p-4 text-brand-gold uppercase tracking-wider">
-                    TOTAL DO MÊS (TODOS OS PRODUTOS)
+                    TOTAL DO MÊS
                   </td>
                   <td className="p-4 text-center font-mono text-brand-offwhite">
                     {monthlyTotals.requested} un
@@ -620,7 +642,7 @@ export default function CarregamentoPage() {
                     {monthlyTotals.net} un
                   </td>
                   <td className="p-4 text-right font-mono text-brand-gold text-lg">
-                    R$ {monthlyTotals.totalValue.toFixed(2).replace(".", ",")}
+                    {formatValue(monthlyTotals.totalValue)}
                   </td>
                 </tr>
               </tfoot>

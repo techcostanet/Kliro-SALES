@@ -21,10 +21,15 @@ import {
   ChevronRight,
   Plus,
   Wallet,
+  Eye,
+  EyeOff,
+  Building2,
 } from "lucide-react";
 import Link from "next/link";
+import { usePrivacy } from "@/lib/privacyContext";
 
 export default function LukeOverviewPage() {
+  const { hideValues, togglePrivacy, formatValue } = usePrivacy();
   const [period, setPeriod] = useState<"MONTH" | "WEEK">("MONTH");
 
   // Top Produtos
@@ -70,261 +75,287 @@ export default function LukeOverviewPage() {
   const vendorRanking = [
     {
       name: "Alisson",
-      vehicle: "Chevrolet Montana",
-      routes: "Rotas R1 a R12",
+      vehicle: "Montana",
+      routes: "R1 a R12",
       totalSales: 26450.0,
       target: 45000.0,
       commission: 2116.0,
       visitsCount: 78,
-      status: "Em Rota (R4)",
+      status: "Em Rota",
     },
     {
       name: "Alexandre",
-      vehicle: "Renault Clio Express",
-      routes: "Rotas F1 a F12",
+      vehicle: "Clio",
+      routes: "F1 a F12",
       totalSales: 19820.0,
       target: 40000.0,
       commission: 1585.6,
       visitsCount: 62,
-      status: "Em Rota (F2)",
+      status: "Em Rota",
     },
     {
       name: "Lucas",
-      vehicle: "Fiat Strada Freedom",
-      routes: "R1, R2, Representação",
+      vehicle: "Strada",
+      routes: "Representação",
       totalSales: 12150.0,
       target: 50000.0,
       commission: 1215.0,
       visitsCount: 28,
-      status: "Base Central",
+      status: "Base",
     },
-  ];
-
-  // Alertas de Estoque Baixo
-  const lowStockProducts = [
-    { name: "Navalhete Inox Profissional", current: 8, min: 20, brand: "Derby" },
-    { name: "Botox Orgânico Matizador 1Kg", current: 5, min: 15, brand: "LUKE Brasil" },
-    { name: "Cera Modeladora Brilho 120g", current: 12, min: 25, brand: "LUKE Brasil" },
   ];
 
   return (
     <div className="space-y-8">
-      {/* Top Header */}
+      {/* Topo / Header com Rótulos de 1 Palavra */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <div className="flex items-center space-x-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-brand-gold animate-pulse" />
-            <span className="text-xs font-bold uppercase tracking-widest text-brand-gold">
-              LUKE Brasil • Painel Executivo de Distribuição
+          <div className="flex items-center space-x-3">
+            <h2 className="text-3xl font-extrabold text-brand-offwhite">Visão</h2>
+            <span className="bg-brand-gold/20 text-brand-gold text-xs px-2.5 py-1 rounded-full font-bold border border-brand-gold/30">
+              Ciclo Mensal
             </span>
           </div>
-          <h2 className="text-3xl font-extrabold text-brand-offwhite mt-1">
-            Visão Geral da Distribuidora
-          </h2>
-          <p className="text-brand-offwhite/60 text-sm mt-0.5">
-            Acompanhamento em tempo real de faturamento, rotas nos salões, equipes e estoque.
+          <p className="text-brand-offwhite/60 text-sm mt-1">
+            Métricas de faturamento, rotas, salões atendidos e metas comerciais.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex bg-brand-graphite p-1 rounded-xl border border-brand-blue/30 text-xs font-bold">
-            <button
-              onClick={() => setPeriod("MONTH")}
-              className={`px-3 py-1.5 rounded-lg transition ${
-                period === "MONTH" ? "bg-brand-gold text-brand-black" : "text-brand-offwhite/60"
-              }`}
-            >
-              Mês Atual
-            </button>
-            <button
-              onClick={() => setPeriod("WEEK")}
-              className={`px-3 py-1.5 rounded-lg transition ${
-                period === "WEEK" ? "bg-brand-gold text-brand-black" : "text-brand-offwhite/60"
-              }`}
-            >
-              Ciclo Semanal
-            </button>
-          </div>
+        <div className="flex items-center space-x-2">
+          {/* Botão de Alternar Modo Privacidade */}
+          <button
+            onClick={togglePrivacy}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition ${
+              hideValues
+                ? "bg-brand-gold/20 text-brand-gold border-brand-gold/40 shadow-md"
+                : "bg-brand-graphite text-brand-offwhite/70 border-brand-blue/30 hover:text-brand-offwhite"
+            }`}
+            title={hideValues ? "Mostrar Valores" : "Ocultar Valores"}
+          >
+            {hideValues ? <EyeOff size={16} /> : <Eye size={16} />}
+            <span>{hideValues ? "Oculto" : "Visível"}</span>
+          </button>
 
           <Link
             href="/luke/rua"
-            className="flex items-center space-x-2 bg-brand-gold text-brand-black px-4 py-2.5 rounded-xl font-extrabold hover:bg-yellow-500 transition shadow-lg text-sm"
+            className="flex items-center space-x-1.5 bg-brand-gold text-brand-black px-4 py-2 rounded-xl font-extrabold hover:bg-yellow-500 transition shadow-lg text-xs"
           >
-            <span>📱 Abrir Modo Rua</span>
+            <Sparkles size={16} />
+            <span>Rua</span>
           </Link>
         </div>
       </div>
 
-      {/* BLOCO 1: CARDS DE MÉTRICAS FINANCEIRAS (KPIS PRINCIPAIS) */}
+      {/* BLOCO 1: KPIS FINANCEIROS PRINCIPAIS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {/* Faturamento Bruto */}
-        <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-lg relative overflow-hidden">
-          <div className="flex justify-between items-start">
-            <span className="text-xs font-semibold uppercase text-brand-offwhite/60">Faturamento Bruto</span>
-            <div className="p-2 bg-brand-gold/15 text-brand-gold rounded-lg">
+        {/* Faturamento */}
+        <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-lg relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-brand-gold/5 rounded-full blur-2xl group-hover:bg-brand-gold/15 transition" />
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase tracking-wider">
+              Faturamento
+            </span>
+            <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
               <DollarSign size={16} />
             </div>
           </div>
-          <h3 className="text-2xl font-black text-brand-offwhite mt-2">R$ 58.420,00</h3>
-          <div className="text-[11px] text-green-400 flex items-center font-semibold mt-1">
-            <TrendingUp size={13} className="mr-1" />
-            +14.8% vs ciclo anterior
+          <p className="text-2xl font-black text-brand-offwhite mt-3">
+            {formatValue(58420.0)}
+          </p>
+          <div className="flex items-center space-x-1 text-[11px] text-emerald-400 mt-2 font-medium">
+            <ArrowUpRight size={13} />
+            <span>+14,2% vs mês anterior</span>
           </div>
         </div>
 
-        {/* Ticket Médio por Salão */}
-        <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-lg">
-          <div className="flex justify-between items-start">
-            <span className="text-xs font-semibold uppercase text-brand-offwhite/60">Ticket Médio / Salão</span>
-            <div className="p-2 bg-purple-500/15 text-purple-400 rounded-lg">
-              <Store size={16} />
+        {/* Ticket Médio */}
+        <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-lg relative overflow-hidden">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase tracking-wider">
+              Ticket
+            </span>
+            <div className="p-2 rounded-lg bg-brand-blue/30 text-brand-gold border border-brand-blue/40">
+              <ShoppingBag size={16} />
             </div>
           </div>
-          <h3 className="text-2xl font-black text-purple-400 mt-2">R$ 347,70</h3>
-          <span className="text-[11px] text-brand-offwhite/50">168 pedidos atendidos</span>
+          <p className="text-2xl font-black text-brand-gold mt-3">
+            {formatValue(347.7)}
+          </p>
+          <span className="text-[11px] text-brand-offwhite/50 block mt-2">
+            Média por salão visitado
+          </span>
         </div>
 
-        {/* P.A. a Receber */}
-        <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-lg">
-          <div className="flex justify-between items-start">
-            <span className="text-xs font-semibold uppercase text-brand-offwhite/60">P.A.s a Receber (Prazo)</span>
-            <div className="p-2 bg-teal-500/15 text-teal-400 rounded-lg">
+        {/* Receber */}
+        <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-lg relative overflow-hidden">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase tracking-wider">
+              Receber
+            </span>
+            <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20">
               <ArrowDownLeft size={16} />
             </div>
           </div>
-          <h3 className="text-2xl font-black text-teal-400 mt-2">R$ 5.430,00</h3>
-          <span className="text-[11px] text-brand-offwhite/50">Vendas a prazo em rotas</span>
+          <p className="text-2xl font-black text-purple-400 mt-3">
+            {formatValue(5430.0)}
+          </p>
+          <span className="text-[11px] text-purple-300/70 block mt-2">
+            18 salões com prazo aberto
+          </span>
         </div>
 
-        {/* Contas a Pagar */}
-        <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-lg">
-          <div className="flex justify-between items-start">
-            <span className="text-xs font-semibold uppercase text-brand-offwhite/60">Contas a Pagar</span>
-            <div className="p-2 bg-amber-500/15 text-amber-400 rounded-lg">
+        {/* Pagar */}
+        <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-lg relative overflow-hidden">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase tracking-wider">
+              Pagar
+            </span>
+            <div className="p-2 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20">
               <ArrowUpRight size={16} />
             </div>
           </div>
-          <h3 className="text-2xl font-black text-amber-400 mt-2">R$ 3.745,00</h3>
-          <span className="text-[11px] text-brand-offwhite/50">Fornecedores & Frotas</span>
+          <p className="text-2xl font-black text-rose-400 mt-3">
+            {formatValue(3745.0)}
+          </p>
+          <span className="text-[11px] text-rose-300/70 block mt-2">
+            Fábricas & Despesas da rota
+          </span>
         </div>
 
-        {/* Saldo Líquido Operacional */}
-        <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-gold/40 shadow-lg bg-gradient-to-br from-brand-graphite to-brand-gold/5">
-          <div className="flex justify-between items-start">
-            <span className="text-xs font-semibold uppercase text-brand-gold">Saldo Caixa Líquido</span>
-            <div className="p-2 bg-brand-gold/20 text-brand-gold rounded-lg">
+        {/* Caixa */}
+        <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-lg relative overflow-hidden">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase tracking-wider">
+              Caixa
+            </span>
+            <div className="p-2 rounded-lg bg-teal-500/10 text-teal-400 border border-teal-500/20">
               <Wallet size={16} />
             </div>
           </div>
-          <h3 className="text-2xl font-black text-brand-gold mt-2">R$ 54.675,00</h3>
-          <span className="text-[11px] text-green-400 font-semibold">DRE Positivo no mês</span>
+          <p className="text-2xl font-black text-teal-400 mt-3">
+            {formatValue(54675.0)}
+          </p>
+          <span className="text-[11px] text-teal-300/70 block mt-2">
+            Saldo operacional real
+          </span>
         </div>
       </div>
 
-      {/* BLOCO 2: COBERTURA DE ROTAS & OPERACIONAL */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-brand-graphite p-4 rounded-xl border border-brand-blue/30 flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-500/15 text-blue-400 flex items-center justify-center shrink-0">
-            <Store size={20} />
+      {/* BLOCO 2: KPIS OPERACIONAIS */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Cobertura de Salões */}
+        <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md flex items-center space-x-4">
+          <div className="w-12 h-12 rounded-xl bg-brand-blue/30 border border-brand-gold/30 flex items-center justify-center text-brand-gold shrink-0">
+            <Store size={24} />
           </div>
           <div>
-            <span className="text-xs text-brand-offwhite/50">Salões Cadastrados</span>
-            <p className="text-lg font-black text-brand-offwhite">559 salões</p>
-            <span className="text-[10px] text-green-400 font-medium">168 visitados no ciclo (30%)</span>
+            <p className="text-xs text-brand-offwhite/60 font-semibold uppercase">Salões</p>
+            <p className="text-xl font-extrabold text-brand-offwhite mt-0.5">168 / 559</p>
+            <span className="text-[11px] text-brand-gold font-bold">30,0% no ciclo</span>
           </div>
         </div>
 
-        <div className="bg-brand-graphite p-4 rounded-xl border border-brand-blue/30 flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-brand-gold/15 text-brand-gold flex items-center justify-center shrink-0">
-            <Truck size={20} />
+        {/* Frotas em Campo */}
+        <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md flex items-center space-x-4">
+          <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+            <Truck size={24} />
           </div>
           <div>
-            <span className="text-xs text-brand-offwhite/50">Veículos em Campo</span>
-            <p className="text-lg font-black text-brand-offwhite">3 frotas ativas</p>
-            <span className="text-[10px] text-brand-gold font-medium">Montana, Clio & Strada</span>
+            <p className="text-xs text-brand-offwhite/60 font-semibold uppercase">Frotas</p>
+            <p className="text-xl font-extrabold text-brand-offwhite mt-0.5">3 Veículos</p>
+            <span className="text-[11px] text-amber-400 font-bold">Montana, Clio, Strada</span>
           </div>
         </div>
 
-        <div className="bg-brand-graphite p-4 rounded-xl border border-brand-blue/30 flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
-            <CheckCircle2 size={20} />
+        {/* Taxa de Positivação */}
+        <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md flex items-center space-x-4">
+          <div className="w-12 h-12 rounded-xl bg-green-500/10 border border-green-500/30 flex items-center justify-center text-green-400 shrink-0">
+            <CheckCircle2 size={24} />
           </div>
           <div>
-            <span className="text-xs text-brand-offwhite/50">Taxa de Positivação</span>
-            <p className="text-lg font-black text-emerald-400">91,2%</p>
-            <span className="text-[10px] text-brand-offwhite/40">Compras efetivas na visita</span>
+            <p className="text-xs text-brand-offwhite/60 font-semibold uppercase">Positivação</p>
+            <p className="text-xl font-extrabold text-brand-offwhite mt-0.5">91,2%</p>
+            <span className="text-[11px] text-green-400 font-bold">Visitas com pedido</span>
           </div>
         </div>
 
-        <div className="bg-brand-graphite p-4 rounded-xl border border-brand-blue/30 flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-purple-500/15 text-purple-400 flex items-center justify-center shrink-0">
-            <Package size={20} />
+        {/* Cargas */}
+        <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md flex items-center space-x-4">
+          <div className="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400 shrink-0">
+            <Package size={24} />
           </div>
           <div>
-            <span className="text-xs text-brand-offwhite/50">Carregamentos</span>
-            <p className="text-lg font-black text-purple-400">18 / 20 Cargas</p>
-            <span className="text-[10px] text-brand-offwhite/40">Ciclos despachados</span>
+            <p className="text-xs text-brand-offwhite/60 font-semibold uppercase">Cargas</p>
+            <p className="text-xl font-extrabold text-brand-offwhite mt-0.5">18 Despachadas</p>
+            <span className="text-[11px] text-purple-300 font-bold">90% conferidas</span>
           </div>
         </div>
       </div>
 
-      {/* BLOCO 3: RANKING DE VENDEDORES & PRODUTOS MAIS VENDIDOS */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Desempenho da Equipe Comercial */}
-        <div className="bg-brand-graphite p-6 rounded-2xl border border-brand-blue/30 shadow-xl space-y-4">
-          <div className="flex justify-between items-center pb-2 border-b border-brand-blue/30">
-            <div>
-              <h3 className="text-lg font-bold text-brand-offwhite flex items-center space-x-2">
-                <Users size={20} className="text-brand-gold" />
-                <span>Ranking Comercial de Campo</span>
-              </h3>
-              <p className="text-xs text-brand-offwhite/50">
-                Faturamento individual, metas alcançadas e comissões provisionadas.
-              </p>
+      {/* BLOCO 3: RANKING DE VENDEDORES & TOP PRODUTOS */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* RANKING COMERCIAL */}
+        <div className="lg:col-span-2 bg-brand-graphite p-6 rounded-2xl border border-brand-blue/30 shadow-xl space-y-5">
+          <div className="flex justify-between items-center border-b border-brand-blue/20 pb-4">
+            <div className="flex items-center space-x-2">
+              <Users className="text-brand-gold" size={20} />
+              <h3 className="text-lg font-bold text-brand-offwhite">Vendedores</h3>
             </div>
-            <Link href="/luke/vendedores" className="text-xs font-bold text-brand-gold hover:underline">
-              Ver Equipe →
+            <Link
+              href="/luke/vendedores"
+              className="text-xs text-brand-gold hover:underline flex items-center space-x-1"
+            >
+              <span>Detalhes</span>
+              <ChevronRight size={14} />
             </Link>
           </div>
 
           <div className="space-y-4">
             {vendorRanking.map((v, i) => {
-              const progress = Math.min(100, Math.round((v.totalSales / v.target) * 100));
+              const percent = Math.min(100, Math.round((v.totalSales / v.target) * 100));
               return (
-                <div key={v.name} className="p-4 bg-brand-black/50 rounded-xl border border-brand-blue/20 space-y-2">
-                  <div className="flex justify-between items-center">
+                <div
+                  key={v.name}
+                  className="p-4 bg-brand-black/60 rounded-xl border border-brand-blue/30 space-y-3"
+                >
+                  <div className="flex justify-between items-start">
                     <div className="flex items-center space-x-3">
-                      <div className="w-7 h-7 rounded-full bg-brand-gold/20 text-brand-gold font-black text-xs flex items-center justify-center border border-brand-gold/30">
+                      <div className="w-8 h-8 rounded-full bg-brand-gold/20 text-brand-gold font-bold flex items-center justify-center border border-brand-gold/40 text-sm">
                         #{i + 1}
                       </div>
                       <div>
-                        <p className="text-sm font-bold text-brand-offwhite">{v.name}</p>
-                        <p className="text-[11px] text-brand-offwhite/40">
-                          {v.vehicle} • {v.routes}
+                        <div className="flex items-center space-x-2">
+                          <p className="text-sm font-bold text-brand-offwhite">{v.name}</p>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-blue/40 text-brand-gold font-medium">
+                            {v.vehicle}
+                          </span>
+                        </div>
+                        <p className="text-xs text-brand-offwhite/50 mt-0.5">
+                          {v.routes} • {v.visitsCount} salões
                         </p>
                       </div>
                     </div>
 
                     <div className="text-right">
-                      <p className="text-sm font-mono font-bold text-brand-gold">
-                        R$ {v.totalSales.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                      <p className="text-sm font-black text-brand-offwhite">
+                        {formatValue(v.totalSales)}
                       </p>
-                      <span className="text-[10px] text-emerald-400 font-medium">
-                        Comissão: R$ {v.commission.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                      </span>
+                      <p className="text-[11px] text-emerald-400 font-medium">
+                        Comissão: {formatValue(v.commission)}
+                      </p>
                     </div>
                   </div>
 
                   {/* Barra de Progresso da Meta */}
-                  <div>
-                    <div className="flex justify-between text-[10px] text-brand-offwhite/60 mb-1">
-                      <span>Meta: R$ {v.target.toLocaleString("pt-BR")}</span>
-                      <span className="font-bold text-brand-gold">{progress}%</span>
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px] text-brand-offwhite/60">
+                      <span>Meta: {formatValue(v.target)}</span>
+                      <span className="font-bold text-brand-gold">{percent}%</span>
                     </div>
-                    <div className="w-full h-2 bg-brand-black rounded-full overflow-hidden border border-brand-blue/30">
+                    <div className="w-full bg-brand-graphite h-2 rounded-full overflow-hidden border border-brand-blue/20">
                       <div
-                        className="h-full bg-gradient-to-r from-brand-gold to-yellow-400 rounded-full transition-all duration-500"
-                        style={{ width: `${progress}%` }}
+                        className="bg-brand-gold h-full rounded-full transition-all"
+                        style={{ width: `${percent}%` }}
                       />
                     </div>
                   </div>
@@ -334,45 +365,52 @@ export default function LukeOverviewPage() {
           </div>
         </div>
 
-        {/* Top 5 Produtos Mais Vendidos */}
-        <div className="bg-brand-graphite p-6 rounded-2xl border border-brand-blue/30 shadow-xl space-y-4">
-          <div className="flex justify-between items-center pb-2 border-b border-brand-blue/30">
-            <div>
-              <h3 className="text-lg font-bold text-brand-offwhite flex items-center space-x-2">
-                <Sparkles size={20} className="text-brand-gold" />
-                <span>Top Produtos Mais Vendidos</span>
-              </h3>
-              <p className="text-xs text-brand-offwhite/50">
-                Itens com maior giro nas rotas de salões de beleza e barbearias.
-              </p>
+        {/* TOP PRODUTOS MAIS VENDIDOS */}
+        <div className="bg-brand-graphite p-6 rounded-2xl border border-brand-blue/30 shadow-xl space-y-5">
+          <div className="flex justify-between items-center border-b border-brand-blue/20 pb-4">
+            <div className="flex items-center space-x-2">
+              <Package className="text-brand-gold" size={20} />
+              <h3 className="text-lg font-bold text-brand-offwhite">Produtos</h3>
             </div>
-            <Link href="/luke/produtos" className="text-xs font-bold text-brand-gold hover:underline">
-              Ver Catálogo →
+            <Link
+              href="/luke/produtos"
+              className="text-xs text-brand-gold hover:underline flex items-center space-x-1"
+            >
+              <span>Catálogo</span>
+              <ChevronRight size={14} />
             </Link>
           </div>
 
           <div className="space-y-3">
-            {topProducts.map((p, idx) => (
+            {topProducts.map((prod, idx) => (
               <div
-                key={p.name}
-                className="p-3 bg-brand-black/50 rounded-xl border border-brand-blue/20 flex items-center justify-between"
+                key={prod.name}
+                className="flex items-center space-x-3 p-2.5 bg-brand-black/50 rounded-xl border border-brand-blue/20 hover:border-brand-gold/30 transition"
               >
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-lg bg-brand-black border border-brand-blue/30 overflow-hidden shrink-0">
-                    <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-brand-gold uppercase">{p.brand}</span>
-                    <p className="text-xs font-bold text-brand-offwhite">{p.name}</p>
-                    <span className="text-[10px] text-brand-offwhite/40">{p.soldUnits} unidades distribuídas</span>
-                  </div>
+                <div className="w-11 h-11 rounded-lg bg-brand-graphite border border-brand-blue/30 overflow-hidden shrink-0">
+                  <img
+                    src={prod.image}
+                    alt={prod.name}
+                    className="w-full h-full object-cover"
+                  />
                 </div>
-
-                <div className="text-right">
-                  <p className="text-xs font-mono font-bold text-emerald-400">
-                    R$ {p.revenue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center space-x-1.5">
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-brand-gold/15 text-brand-gold font-bold uppercase">
+                      {prod.brand}
+                    </span>
+                    <p className="text-xs font-bold text-brand-offwhite truncate">
+                      {prod.name}
+                    </p>
+                  </div>
+                  <p className="text-[11px] text-brand-offwhite/50 mt-0.5">
+                    {prod.soldUnits} un vendidas
                   </p>
-                  <span className="text-[10px] text-brand-offwhite/40 font-mono">#{idx + 1} Giro</span>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-xs font-black text-brand-gold">
+                    {formatValue(prod.revenue)}
+                  </p>
                 </div>
               </div>
             ))}
@@ -380,77 +418,78 @@ export default function LukeOverviewPage() {
         </div>
       </div>
 
-      {/* BLOCO 4: ALERTAS OPERACIONAIS & ATALHOS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Alerta de Ruptura / Estoque Baixo */}
-        <div className="bg-brand-graphite p-5 rounded-2xl border border-amber-500/30 shadow-lg space-y-3">
-          <div className="flex items-center space-x-2 text-amber-400 font-bold text-sm">
-            <AlertTriangle size={18} />
-            <span>Alerta de Ruptura de Estoque</span>
+      {/* BLOCO 4: ALERTAS DE ESTOQUE & ATALHOS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Alerta de Ruptura */}
+        <div className="bg-brand-graphite p-6 rounded-2xl border border-rose-500/20 shadow-xl space-y-4">
+          <div className="flex items-center space-x-2">
+            <AlertTriangle className="text-rose-400" size={20} />
+            <h3 className="text-base font-bold text-brand-offwhite">Estoque</h3>
           </div>
-          <p className="text-xs text-brand-offwhite/60">
-            Produtos abaixo do estoque de segurança para os próximos carregamentos:
-          </p>
-          <div className="space-y-2">
-            {lowStockProducts.map((item) => (
-              <div key={item.name} className="p-2.5 bg-brand-black/60 rounded-lg border border-amber-500/20 flex justify-between items-center text-xs">
-                <div>
-                  <p className="font-semibold text-brand-offwhite">{item.name}</p>
-                  <span className="text-[10px] text-brand-gold">{item.brand}</span>
-                </div>
-                <div className="text-right font-mono">
-                  <span className="text-rose-400 font-bold">{item.current} un</span>
-                  <span className="text-brand-offwhite/40 text-[10px] block">Mín: {item.min}</span>
-                </div>
+          <div className="space-y-2.5">
+            <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl flex justify-between items-center">
+              <div>
+                <p className="text-xs font-bold text-brand-offwhite">
+                  Lâmina Wilkinson Sword (Caixa c/ 100)
+                </p>
+                <span className="text-[11px] text-rose-300">Apenas 14 caixas em estoque</span>
               </div>
-            ))}
+              <span className="px-2 py-0.5 text-[10px] font-extrabold bg-rose-500/20 text-rose-400 rounded-md border border-rose-500/30">
+                Crítico
+              </span>
+            </div>
+
+            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl flex justify-between items-center">
+              <div>
+                <p className="text-xs font-bold text-brand-offwhite">
+                  Pomada Matte Seco 150g (LUKE)
+                </p>
+                <span className="text-[11px] text-amber-300">62 unidades restantes</span>
+              </div>
+              <span className="px-2 py-0.5 text-[10px] font-extrabold bg-amber-500/20 text-amber-400 rounded-md border border-amber-500/30">
+                Atenção
+              </span>
+            </div>
           </div>
-          <Link
-            href="/luke/produtos"
-            className="block text-center text-xs font-bold text-brand-gold hover:underline pt-1"
-          >
-            Ajustar Estoque de Fábrica →
-          </Link>
         </div>
 
-        {/* Atalhos Operacionais */}
-        <div className="md:col-span-2 bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-lg space-y-4">
-          <h4 className="text-sm font-bold text-brand-offwhite">Ações Rápidas de Gestão</h4>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {/* Atalhos Rápidos de Gestão */}
+        <div className="bg-brand-graphite p-6 rounded-2xl border border-brand-blue/30 shadow-xl space-y-4">
+          <div className="flex items-center space-x-2">
+            <Sparkles className="text-brand-gold" size={20} />
+            <h3 className="text-base font-bold text-brand-offwhite">Atalhos</h3>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
             <Link
               href="/luke/clientes"
-              className="p-4 bg-brand-black/60 hover:bg-brand-blue/20 border border-brand-blue/30 rounded-xl transition text-center group"
+              className="p-3 bg-brand-black/60 rounded-xl border border-brand-blue/30 hover:border-brand-gold/40 transition flex items-center space-x-2 group"
             >
-              <Store size={22} className="text-brand-gold mx-auto group-hover:scale-110 transition" />
-              <p className="text-xs font-bold text-brand-offwhite mt-2">Salões & Clientes</p>
-              <span className="text-[10px] text-brand-offwhite/40">559 mapeados</span>
-            </Link>
-
-            <Link
-              href="/luke/carregamento"
-              className="p-4 bg-brand-black/60 hover:bg-brand-blue/20 border border-brand-blue/30 rounded-xl transition text-center group"
-            >
-              <Truck size={22} className="text-brand-gold mx-auto group-hover:scale-110 transition" />
-              <p className="text-xs font-bold text-brand-offwhite mt-2">Carregamentos</p>
-              <span className="text-[10px] text-brand-offwhite/40">20 Cargas + Mês</span>
+              <Store size={18} className="text-brand-gold group-hover:scale-110 transition" />
+              <span className="text-xs font-bold text-brand-offwhite">Clientes</span>
             </Link>
 
             <Link
               href="/luke/financeiro"
-              className="p-4 bg-brand-black/60 hover:bg-brand-blue/20 border border-brand-blue/30 rounded-xl transition text-center group"
+              className="p-3 bg-brand-black/60 rounded-xl border border-brand-blue/30 hover:border-brand-gold/40 transition flex items-center space-x-2 group"
             >
-              <DollarSign size={22} className="text-brand-gold mx-auto group-hover:scale-110 transition" />
-              <p className="text-xs font-bold text-brand-offwhite mt-2">Financeiro & DRE</p>
-              <span className="text-[10px] text-brand-offwhite/40">Pagar & Receber</span>
+              <DollarSign size={18} className="text-emerald-400 group-hover:scale-110 transition" />
+              <span className="text-xs font-bold text-brand-offwhite">Financeiro</span>
             </Link>
 
             <Link
-              href="/luke/rua"
-              className="p-4 bg-brand-gold/15 hover:bg-brand-gold/25 border border-brand-gold/40 rounded-xl transition text-center group"
+              href="/luke/rotas"
+              className="p-3 bg-brand-black/60 rounded-xl border border-brand-blue/30 hover:border-brand-gold/40 transition flex items-center space-x-2 group"
             >
-              <span className="text-2xl block group-hover:scale-110 transition">📱</span>
-              <p className="text-xs font-bold text-brand-gold mt-1.5">Modo Rua</p>
-              <span className="text-[10px] text-brand-gold/70">Atendimento Externo</span>
+              <MapPin size={18} className="text-brand-gold group-hover:scale-110 transition" />
+              <span className="text-xs font-bold text-brand-offwhite">Rotas</span>
+            </Link>
+
+            <Link
+              href="/luke/empresa"
+              className="p-3 bg-brand-black/60 rounded-xl border border-brand-blue/30 hover:border-brand-gold/40 transition flex items-center space-x-2 group"
+            >
+              <Building2 size={18} className="text-purple-400 group-hover:scale-110 transition" />
+              <span className="text-xs font-bold text-brand-offwhite">Empresa</span>
             </Link>
           </div>
         </div>

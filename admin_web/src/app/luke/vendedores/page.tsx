@@ -16,9 +16,14 @@ import {
   RefreshCw,
   Users,
   Target,
+  MessageCircle,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { collection, getDocs, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { formatWhatsAppUrl } from "../clientes/page";
+import { usePrivacy } from "@/lib/privacyContext";
 
 export interface VendorItem {
   id: string;
@@ -95,33 +100,36 @@ const INITIAL_VENDORS: VendorItem[] = [
 ];
 
 export default function LukeVendedoresPage() {
+  const { hideValues, togglePrivacy, formatValue } = usePrivacy();
   const [vendors, setVendors] = useState<VendorItem[]>(INITIAL_VENDORS);
   const [loadingFirestore, setLoadingFirestore] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRoleFilter, setSelectedRoleFilter] = useState("ALL");
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingVendor, setEditingVendor] = useState<VendorItem | null>(null);
+
   const [formData, setFormData] = useState<Partial<VendorItem>>({
     name: "",
     email: "",
     role: "VENDOR",
-    phone: "(31) 99999-9999",
-    vehicle: "Veículo Comercial",
-    vehiclePlate: "ABC-1234",
+    phone: "(31) 98888-0000",
+    vehicle: "Fiat Strada",
+    vehiclePlate: "LUK-1234",
     commissionRate: 8.0,
     assignedRoutes: ["R1", "R2"],
-    monthlyTarget: 35000.0,
+    monthlyTarget: 40000.0,
     status: "ACTIVE",
     notes: "",
   });
 
   const tenantId = "tenant_luke_001";
 
-  // Carrega do Firestore se disponível
-  const fetchVendorsFromFirestore = async () => {
+  // Carregar do Firestore
+  const fetchVendors = async () => {
     try {
       setLoadingFirestore(true);
       const snapshot = await getDocs(collection(db, `tenants/${tenantId}/users`));
@@ -134,12 +142,12 @@ export default function LukeVendedoresPage() {
             name: d.name || "Vendedor",
             email: d.email || "",
             role: d.role || "VENDOR",
-            phone: d.phone || "(31) 99999-9999",
+            phone: d.phone || "",
             vehicle: d.vehicle || "Veículo Comercial",
             vehiclePlate: d.vehiclePlate || "---",
-            commissionRate: typeof d.commissionRate === "number" ? d.commissionRate : 8.0,
-            assignedRoutes: Array.isArray(d.assignedRoutes) ? d.assignedRoutes : ["R1"],
-            monthlyTarget: typeof d.monthlyTarget === "number" ? d.monthlyTarget : 35000,
+            commissionRate: Number(d.commissionRate || 8),
+            assignedRoutes: Array.isArray(d.assignedRoutes) ? d.assignedRoutes : [d.assignedRoutes || "R1"],
+            monthlyTarget: Number(d.monthlyTarget || 35000),
             status: d.status || "ACTIVE",
             notes: d.notes || "",
           });
@@ -147,17 +155,17 @@ export default function LukeVendedoresPage() {
         setVendors(loaded);
       }
     } catch (err: any) {
-      console.warn("Firestore fetch offline/fallback para initial vendors:", err?.message);
+      console.warn("Firestore fetch offline/fallback:", err?.message);
     } finally {
       setLoadingFirestore(false);
     }
   };
 
   useEffect(() => {
-    fetchVendorsFromFirestore();
+    fetchVendors();
   }, []);
 
-  // Sincronizar todos no Firestore
+  // Sincronizar Firestore
   const handleSyncFirestore = async () => {
     setLoadingFirestore(true);
     setSyncMessage(null);
@@ -169,7 +177,7 @@ export default function LukeVendedoresPage() {
           { merge: true }
         );
       }
-      setSyncMessage("✅ Equipe comercial sincronizada com o Firestore com sucesso!");
+      setSyncMessage("✅ Equipe sincronizada com o Firestore com sucesso!");
       setTimeout(() => setSyncMessage(null), 4000);
     } catch (err: any) {
       setSyncMessage(`❌ Erro ao sincronizar: ${err?.message}`);
@@ -178,18 +186,19 @@ export default function LukeVendedoresPage() {
     }
   };
 
+  // Filtragem
   const filtered = useMemo(() => {
     return vendors.filter((v) => {
-      const nameMatch = v.name.toLowerCase().includes(searchTerm.toLowerCase());
-      const emailMatch = v.email.toLowerCase().includes(searchTerm.toLowerCase());
-      const phoneMatch = v.phone ? v.phone.includes(searchTerm) : false;
-      const vehicleMatch = v.vehicle ? v.vehicle.toLowerCase().includes(searchTerm.toLowerCase()) : false;
-      const matchesSearch = nameMatch || emailMatch || phoneMatch || vehicleMatch;
+      const matchSearch =
+        v.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        v.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        v.vehicle.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        v.assignedRoutes.join(" ").toLowerCase().includes(searchTerm.toLowerCase());
 
-      const matchesRole =
+      const matchRole =
         selectedRoleFilter === "ALL" || v.role === selectedRoleFilter;
 
-      return matchesSearch && matchesRole;
+      return matchSearch && matchRole;
     });
   }, [vendors, searchTerm, selectedRoleFilter]);
 
@@ -293,11 +302,11 @@ export default function LukeVendedoresPage() {
 
   return (
     <div className="space-y-8">
-      {/* Header */}
+      {/* Header com Nomes de 1 Palavra */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <div className="flex items-center space-x-3">
-            <h2 className="text-3xl font-extrabold text-brand-offwhite">Equipe Comercial</h2>
+            <h2 className="text-3xl font-extrabold text-brand-offwhite">Vendedores</h2>
             <span className="bg-brand-gold/20 text-brand-gold text-xs px-2.5 py-1 rounded-full font-bold border border-brand-gold/30">
               {vendors.length} integrantes
             </span>
@@ -307,22 +316,36 @@ export default function LukeVendedoresPage() {
           </p>
         </div>
 
-        <div className="flex items-center space-x-3 w-full sm:w-auto">
+        <div className="flex items-center space-x-2 w-full sm:w-auto">
+          {/* Botão de Alternar Modo Privacidade */}
+          <button
+            onClick={togglePrivacy}
+            className={`flex items-center space-x-1.5 px-3 py-2.5 rounded-xl text-xs font-bold border transition ${
+              hideValues
+                ? "bg-brand-gold/20 text-brand-gold border-brand-gold/40"
+                : "bg-brand-graphite text-brand-offwhite/70 border-brand-blue/30 hover:text-brand-offwhite"
+            }`}
+            title={hideValues ? "Mostrar Valores" : "Ocultar Valores"}
+          >
+            {hideValues ? <EyeOff size={16} /> : <Eye size={16} />}
+            <span>{hideValues ? "Oculto" : "Visível"}</span>
+          </button>
+
           <button
             onClick={handleSyncFirestore}
             disabled={loadingFirestore}
-            className="flex-1 sm:flex-none flex items-center justify-center space-x-2 bg-brand-blue/40 border border-brand-gold/40 text-brand-offwhite hover:bg-brand-blue/60 px-4 py-2.5 rounded-xl font-semibold transition text-sm shadow-md"
+            className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-brand-blue/40 border border-brand-gold/40 text-brand-offwhite hover:bg-brand-blue/60 px-3.5 py-2.5 rounded-xl font-semibold transition text-xs shadow-md"
             title="Sincronizar equipe com o Firestore"
           >
-            <RefreshCw size={16} className={loadingFirestore ? "animate-spin text-brand-gold" : "text-brand-gold"} />
-            <span>Sincronizar Firestore</span>
+            <RefreshCw size={14} className={loadingFirestore ? "animate-spin text-brand-gold" : "text-brand-gold"} />
+            <span>Sincronizar</span>
           </button>
 
           <button
             onClick={() => handleOpenModal()}
-            className="flex-1 sm:flex-none flex items-center justify-center space-x-2 bg-brand-gold text-brand-black px-4 py-2.5 rounded-xl font-extrabold hover:bg-yellow-500 transition shadow-lg text-sm"
+            className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-brand-gold text-brand-black px-4 py-2.5 rounded-xl font-extrabold hover:bg-yellow-500 transition shadow-lg text-xs shrink-0"
           >
-            <Plus size={18} />
+            <Plus size={16} />
             <span>Novo Vendedor</span>
           </button>
         </div>
@@ -340,38 +363,38 @@ export default function LukeVendedoresPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Equipe Ativa</span>
+            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Equipe</span>
             <Users size={18} className="text-green-400" />
           </div>
-          <p className="text-2xl font-black text-green-400 mt-2">{activeVendors} vendedores</p>
-          <span className="text-[11px] text-brand-offwhite/50">Atuando em campo e base</span>
+          <p className="text-2xl font-black text-green-400 mt-2">{activeVendors} ativos</p>
+          <span className="text-[11px] text-brand-offwhite/50">Em campo e base</span>
         </div>
 
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Veículos em Rota</span>
+            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Veículos</span>
             <Truck size={18} className="text-brand-gold" />
           </div>
           <p className="text-2xl font-black text-brand-offwhite mt-2">
-            {vendors.filter((v) => v.vehiclePlate !== "---").length} veículos
+            {vendors.filter((v) => v.vehiclePlate !== "---").length} frotas
           </p>
           <span className="text-[11px] text-brand-gold font-medium">Abastecidos com estoque</span>
         </div>
 
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Meta Mensal Total</span>
+            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Meta</span>
             <Target size={18} className="text-purple-400" />
           </div>
           <p className="text-2xl font-black text-purple-400 mt-2">
-            R$ {totalTarget.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+            {formatValue(totalTarget)}
           </p>
           <span className="text-[11px] text-brand-offwhite/50">Faturamento alvo do time</span>
         </div>
 
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Comissão Média</span>
+            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Comissão</span>
             <DollarSign size={18} className="text-emerald-400" />
           </div>
           <p className="text-2xl font-black text-emerald-400 mt-2">8,0%</p>
@@ -391,7 +414,7 @@ export default function LukeVendedoresPage() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="block w-full pl-10 pr-3 py-2 bg-brand-black border border-brand-blue/50 rounded-lg text-sm text-brand-offwhite placeholder-brand-offwhite/30 focus:outline-none focus:ring-1 focus:ring-brand-gold"
-              placeholder="Buscar por nome, e-mail ou veículo..."
+              placeholder="Buscar nome, e-mail ou veículo..."
             />
           </div>
 
@@ -402,10 +425,10 @@ export default function LukeVendedoresPage() {
               className="bg-brand-black border border-brand-blue/50 text-brand-offwhite text-xs rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-brand-gold"
             >
               <option value="ALL">Todos os Cargos</option>
-              <option value="VENDOR">Vendedores de Campo</option>
+              <option value="VENDOR">Vendedor de Rua</option>
               <option value="ADMIN_VENDOR">Admin & Vendedor</option>
-              <option value="ADMIN">Administração Base</option>
-              <option value="SUPERVISOR">Supervisores</option>
+              <option value="ADMIN">Administração</option>
+              <option value="SUPERVISOR">Supervisor</option>
             </select>
           </div>
         </div>
@@ -414,12 +437,12 @@ export default function LukeVendedoresPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-brand-blue/10 border-b border-brand-blue/30 text-brand-offwhite/70 text-xs uppercase tracking-wider">
-                <th className="p-4 font-medium">Nome & Contato</th>
-                <th className="p-4 font-medium">Cargo / Função</th>
-                <th className="p-4 font-medium">Veículo & Placa</th>
-                <th className="p-4 font-medium">Rotas Atribuídas</th>
+                <th className="p-4 font-medium">Nome & WhatsApp</th>
+                <th className="p-4 font-medium">Função</th>
+                <th className="p-4 font-medium">Veículo</th>
+                <th className="p-4 font-medium">Rotas</th>
                 <th className="p-4 font-medium">Comissão</th>
-                <th className="p-4 font-medium">Meta Mensal</th>
+                <th className="p-4 font-medium">Meta</th>
                 <th className="p-4 font-medium">Status</th>
                 <th className="p-4 font-medium text-right">Ações</th>
               </tr>
@@ -439,10 +462,17 @@ export default function LukeVendedoresPage() {
                       <div>
                         <p className="text-brand-offwhite font-bold">{user.name}</p>
                         <p className="text-xs text-brand-offwhite/50">{user.email}</p>
-                        <p className="text-[11px] text-brand-gold flex items-center space-x-1 mt-0.5">
-                          <Phone size={10} />
-                          <span>{user.phone}</span>
-                        </p>
+                        <div className="mt-0.5">
+                          <a
+                            href={formatWhatsAppUrl(user.phone)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center space-x-1 text-[11px] text-green-400 font-mono hover:underline font-bold"
+                          >
+                            <MessageCircle size={11} className="text-green-400" />
+                            <span>{user.phone}</span>
+                          </a>
+                        </div>
                       </div>
                     </div>
                   </td>
@@ -463,7 +493,7 @@ export default function LukeVendedoresPage() {
                         ? "Administração"
                         : user.role === "SUPERVISOR"
                         ? "Supervisor"
-                        : "Vendedor de Rua"}
+                        : "Vendedor"}
                     </span>
                   </td>
 
@@ -500,9 +530,7 @@ export default function LukeVendedoresPage() {
                   </td>
 
                   <td className="p-4 font-bold text-brand-offwhite text-xs">
-                    {user.monthlyTarget > 0
-                      ? `R$ ${user.monthlyTarget.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
-                      : "---"}
+                    {user.monthlyTarget > 0 ? formatValue(user.monthlyTarget) : "---"}
                   </td>
 
                   <td className="p-4">
@@ -558,7 +586,7 @@ export default function LukeVendedoresPage() {
               </div>
               <div>
                 <h3 className="text-xl font-bold text-brand-offwhite">
-                  {editingVendor ? "Editar Vendedor / Integrante" : "Cadastrar Novo Vendedor"}
+                  {editingVendor ? "Editar Vendedor" : "Novo Vendedor"}
                 </h3>
                 <p className="text-xs text-brand-offwhite/60">
                   Defina os acessos, veículo, rotas de atendimento e comissões.
@@ -584,7 +612,7 @@ export default function LukeVendedoresPage() {
 
                 <div>
                   <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                    E-mail de Acesso
+                    E-mail
                   </label>
                   <input
                     type="email"
@@ -600,7 +628,7 @@ export default function LukeVendedoresPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                    Telefone / WhatsApp
+                    WhatsApp
                   </label>
                   <input
                     type="text"
@@ -613,17 +641,17 @@ export default function LukeVendedoresPage() {
 
                 <div>
                   <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                    Cargo / Função
+                    Função
                   </label>
                   <select
                     value={formData.role || "VENDOR"}
                     onChange={(e: any) => setFormData({ ...formData, role: e.target.value })}
                     className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold"
                   >
-                    <option value="VENDOR">Vendedor de Rua (Modo Rua)</option>
+                    <option value="VENDOR">Vendedor</option>
                     <option value="ADMIN_VENDOR">Admin & Vendedor</option>
-                    <option value="ADMIN">Administrador Geral</option>
-                    <option value="SUPERVISOR">Supervisor Comercial</option>
+                    <option value="ADMIN">Administrador</option>
+                    <option value="SUPERVISOR">Supervisor</option>
                   </select>
                 </div>
               </div>
@@ -631,20 +659,20 @@ export default function LukeVendedoresPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                    Veículo de Entrega
+                    Veículo
                   </label>
                   <input
                     type="text"
                     value={formData.vehicle || ""}
                     onChange={(e) => setFormData({ ...formData, vehicle: e.target.value })}
                     className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold"
-                    placeholder="Ex: Fiat Strada Freedom"
+                    placeholder="Ex: Fiat Strada"
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                    Placa do Veículo
+                    Placa
                   </label>
                   <input
                     type="text"
@@ -710,7 +738,7 @@ export default function LukeVendedoresPage() {
                   value={formData.notes || ""}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold"
-                  placeholder="Informações de suporte, observações de rota..."
+                  placeholder="Informações de suporte..."
                 />
               </div>
 

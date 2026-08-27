@@ -19,10 +19,13 @@ import {
   Unlock,
   Image as ImageIcon,
   Sparkles,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import initialProducts from "@/lib/products_catalog.json";
+import { usePrivacy } from "@/lib/privacyContext";
 
 export interface ProductItem {
   id: string;
@@ -70,6 +73,7 @@ const BRANDS = [
 ];
 
 export default function LukeProdutosPage() {
+  const { hideValues, togglePrivacy, formatValue } = usePrivacy();
   const [products, setProducts] = useState<ProductItem[]>(initialProducts as ProductItem[]);
   const [loadingFirestore, setLoadingFirestore] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
@@ -102,7 +106,7 @@ export default function LukeProdutosPage() {
 
   const tenantId = "tenant_luke_001";
 
-  // Carrega produtos do Firestore se existirem
+  // Carregar produtos do Firestore
   const fetchProductsFromFirestore = async () => {
     try {
       setLoadingFirestore(true);
@@ -114,15 +118,15 @@ export default function LukeProdutosPage() {
           loaded.push({
             id: docSnap.id,
             code: d.code || "",
-            name: d.name || "",
+            name: d.name || "Produto",
             brand: d.brand || "LUKE Brasil",
-            imageUrl: d.imageUrl || "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&auto=format&fit=crop&q=80",
-            category: d.category || "Pomadas & Ceras",
+            imageUrl: d.imageUrl || "",
+            category: d.category || "Geral",
             unit: d.unit || "un",
             price: Number(d.price || 0),
             costPrice: Number(d.costPrice || 0),
             barcode: d.barcode || "",
-            minStock: Number(d.minStock || 0),
+            minStock: Number(d.minStock || 20),
             physicalStock: Number(d.physicalStock || 0),
             reservedStock: Number(d.reservedStock || 0),
             availableStock: Number(d.availableStock || 0),
@@ -136,7 +140,7 @@ export default function LukeProdutosPage() {
         setProducts(loaded);
       }
     } catch (err: any) {
-      console.warn("Firestore fetch offline/fallback para initial products:", err?.message);
+      console.warn("Firestore fetch offline/fallback:", err?.message);
     } finally {
       setLoadingFirestore(false);
     }
@@ -146,7 +150,7 @@ export default function LukeProdutosPage() {
     fetchProductsFromFirestore();
   }, []);
 
-  // Sincronizar em Lote com Firestore
+  // Sincronizar catálogo inicial completo para Firestore
   const handleSyncFirestore = async () => {
     setLoadingFirestore(true);
     setSyncMessage(null);
@@ -157,7 +161,7 @@ export default function LukeProdutosPage() {
         batch.set(prodRef, { ...prod, updatedAt: new Date() }, { merge: true });
       }
       await batch.commit();
-      setSyncMessage(`✅ Catálogo de ${products.length} produtos sincronizado com o Firestore com sucesso!`);
+      setSyncMessage("✅ Catálogo multi-marcas sincronizado com o Firestore com sucesso!");
       setTimeout(() => setSyncMessage(null), 4000);
     } catch (err: any) {
       setSyncMessage(`❌ Erro ao sincronizar: ${err?.message}`);
@@ -169,11 +173,11 @@ export default function LukeProdutosPage() {
   // Filtragem
   const filtered = useMemo(() => {
     return products.filter((p) => {
-      const nameMatch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
-      const codeMatch = p.code.toLowerCase().includes(searchTerm.toLowerCase());
-      const barcodeMatch = p.barcode.includes(searchTerm);
-      const brandMatchText = p.brand ? p.brand.toLowerCase().includes(searchTerm.toLowerCase()) : false;
-      const matchesSearch = nameMatch || codeMatch || barcodeMatch || brandMatchText;
+      const matchesSearch =
+        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (p.brand && p.brand.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        p.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.barcode.includes(searchTerm);
 
       const matchesCategory =
         selectedCategory === "Todas" || p.category === selectedCategory;
@@ -183,8 +187,8 @@ export default function LukeProdutosPage() {
 
       const matchesBlocked =
         filterBlocked === "ALL" ||
-        (filterBlocked === "ACTIVE" && !p.blockedForLoading) ||
-        (filterBlocked === "BLOCKED" && p.blockedForLoading);
+        (filterBlocked === "BLOCKED" && p.blockedForLoading) ||
+        (filterBlocked === "ACTIVE" && !p.blockedForLoading);
 
       return matchesSearch && matchesCategory && matchesBrand && matchesBlocked;
     });
@@ -194,22 +198,26 @@ export default function LukeProdutosPage() {
   const handleOpenModal = (prod?: ProductItem) => {
     if (prod) {
       setEditingProduct(prod);
-      setFormData(prod);
+      setFormData({
+        ...prod,
+        brand: prod.brand || "LUKE Brasil",
+        imageUrl: prod.imageUrl || "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&auto=format&fit=crop&q=80",
+      });
     } else {
       setEditingProduct(null);
       const nextOrder = products.length + 1;
-      const nextCode = `P${String(nextOrder).padStart(3, "0")}`;
+      const nextId = `PROD-${String(nextOrder).padStart(3, "0")}`;
       setFormData({
-        id: `PROD-${String(nextOrder).padStart(3, "0")}`,
-        code: nextCode,
+        id: nextId,
+        code: `LK${nextOrder}`,
         name: "",
-        brand: "LUKE Brasil",
+        brand: selectedBrand !== "Todas as Marcas" ? selectedBrand : "LUKE Brasil",
         imageUrl: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&auto=format&fit=crop&q=80",
         category: selectedCategory !== "Todas" ? selectedCategory : "Pomadas & Ceras",
         unit: "un",
         price: 30,
         costPrice: 10,
-        barcode: `789800000${String(nextOrder).padStart(4, "0")}`,
+        barcode: "",
         minStock: 20,
         physicalStock: 50,
         reservedStock: 0,
@@ -229,16 +237,16 @@ export default function LukeProdutosPage() {
 
     const payload: ProductItem = {
       id: formData.id || `PROD-${Date.now()}`,
-      code: formData.code?.trim() || `P${products.length + 1}`,
+      code: formData.code?.trim() || `LK${products.length + 1}`,
       name: formData.name.trim(),
-      brand: formData.brand?.trim() || "LUKE Brasil",
-      imageUrl: formData.imageUrl?.trim() || "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&auto=format&fit=crop&q=80",
-      category: formData.category || "Pomadas & Ceras",
+      brand: formData.brand || "LUKE Brasil",
+      imageUrl: formData.imageUrl || "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&auto=format&fit=crop&q=80",
+      category: formData.category || "Geral",
       unit: formData.unit || "un",
       price: Number(formData.price || 0),
       costPrice: Number(formData.costPrice || 0),
-      barcode: formData.barcode || "",
-      minStock: Number(formData.minStock || 0),
+      barcode: formData.barcode?.trim() || "",
+      minStock: Number(formData.minStock || 20),
       physicalStock: Number(formData.physicalStock || 0),
       reservedStock: Number(formData.reservedStock || 0),
       availableStock: Number(formData.physicalStock || 0) - Number(formData.reservedStock || 0),
@@ -253,7 +261,7 @@ export default function LukeProdutosPage() {
         prev.map((p) => (p.id === editingProduct.id ? payload : p))
       );
     } else {
-      setProducts((prev) => [...prev, payload]);
+      setProducts((prev) => [payload, ...prev]);
     }
 
     try {
@@ -269,14 +277,21 @@ export default function LukeProdutosPage() {
   };
 
   const handleToggleBlock = async (prod: ProductItem) => {
-    const updatedBlocked = !prod.blockedForLoading;
-    const updated = { ...prod, blockedForLoading: updatedBlocked };
+    const updated = {
+      ...prod,
+      blockedForLoading: !prod.blockedForLoading,
+      blockingReason: !prod.blockedForLoading ? "Bloqueado pelo Gestor" : "",
+    };
     setProducts((prev) => prev.map((p) => (p.id === prod.id ? updated : p)));
 
     try {
       await setDoc(
         doc(db, `tenants/${tenantId}/products`, prod.id),
-        { blockedForLoading: updatedBlocked, updatedAt: new Date() },
+        {
+          blockedForLoading: updated.blockedForLoading,
+          blockingReason: updated.blockingReason,
+          updatedAt: new Date(),
+        },
         { merge: true }
       );
     } catch (e) {}
@@ -299,13 +314,13 @@ export default function LukeProdutosPage() {
 
   return (
     <div className="space-y-8">
-      {/* Header */}
+      {/* Header com Nomes de 1 Palavra */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <div className="flex items-center space-x-3">
-            <h2 className="text-3xl font-extrabold text-brand-offwhite">Catálogo de Produtos</h2>
+            <h2 className="text-3xl font-extrabold text-brand-offwhite">Produtos</h2>
             <span className="bg-brand-gold/20 text-brand-gold text-xs px-2.5 py-1 rounded-full font-bold border border-brand-gold/30">
-              {totalCount} itens cadastrados
+              {totalCount} itens
             </span>
           </div>
           <p className="text-brand-offwhite/60 text-sm mt-1">
@@ -313,22 +328,36 @@ export default function LukeProdutosPage() {
           </p>
         </div>
 
-        <div className="flex items-center space-x-3 w-full sm:w-auto">
+        <div className="flex items-center space-x-2 w-full sm:w-auto">
+          {/* Botão de Alternar Modo Privacidade */}
+          <button
+            onClick={togglePrivacy}
+            className={`flex items-center space-x-1.5 px-3 py-2.5 rounded-xl text-xs font-bold border transition ${
+              hideValues
+                ? "bg-brand-gold/20 text-brand-gold border-brand-gold/40"
+                : "bg-brand-graphite text-brand-offwhite/70 border-brand-blue/30 hover:text-brand-offwhite"
+            }`}
+            title={hideValues ? "Mostrar Valores" : "Ocultar Valores"}
+          >
+            {hideValues ? <EyeOff size={16} /> : <Eye size={16} />}
+            <span>{hideValues ? "Oculto" : "Visível"}</span>
+          </button>
+
           <button
             onClick={handleSyncFirestore}
             disabled={loadingFirestore}
-            className="flex-1 sm:flex-none flex items-center justify-center space-x-2 bg-brand-blue/40 border border-brand-gold/40 text-brand-offwhite hover:bg-brand-blue/60 px-4 py-2.5 rounded-xl font-semibold transition text-sm shadow-md"
+            className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-brand-blue/40 border border-brand-gold/40 text-brand-offwhite hover:bg-brand-blue/60 px-3.5 py-2.5 rounded-xl font-semibold transition text-xs shadow-md"
             title="Sincronizar produtos com Firestore"
           >
-            <RefreshCw size={16} className={loadingFirestore ? "animate-spin text-brand-gold" : "text-brand-gold"} />
-            <span>Sincronizar Firestore</span>
+            <RefreshCw size={14} className={loadingFirestore ? "animate-spin text-brand-gold" : "text-brand-gold"} />
+            <span>Sincronizar</span>
           </button>
 
           <button
             onClick={() => handleOpenModal()}
-            className="flex-1 sm:flex-none flex items-center justify-center space-x-2 bg-brand-gold text-brand-black px-4 py-2.5 rounded-xl font-extrabold hover:bg-yellow-500 transition shadow-lg text-sm"
+            className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-brand-gold text-brand-black px-4 py-2.5 rounded-xl font-extrabold hover:bg-yellow-500 transition shadow-lg text-xs shrink-0"
           >
-            <Plus size={18} />
+            <Plus size={16} />
             <span>Novo Produto</span>
           </button>
         </div>
@@ -346,16 +375,16 @@ export default function LukeProdutosPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Itens no Catálogo</span>
+            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Catálogo</span>
             <Package size={18} className="text-brand-gold" />
           </div>
           <p className="text-2xl font-black text-brand-offwhite mt-2">{totalCount}</p>
-          <span className="text-[11px] text-green-400 font-medium">100% integrados às rotas</span>
+          <span className="text-[11px] text-green-400 font-medium">Itens cadastrados</span>
         </div>
 
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Liberados para Rota</span>
+            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Liberados</span>
             <Layers size={18} className="text-green-400" />
           </div>
           <p className="text-2xl font-black text-green-400 mt-2">{activeCount}</p>
@@ -364,7 +393,7 @@ export default function LukeProdutosPage() {
 
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Travados / Bloqueados</span>
+            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Bloqueados</span>
             <Lock size={18} className="text-amber-400" />
           </div>
           <p className="text-2xl font-black text-amber-400 mt-2">{blockedCount}</p>
@@ -373,11 +402,11 @@ export default function LukeProdutosPage() {
 
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Valor do Estoque</span>
+            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Estoque</span>
             <DollarSign size={18} className="text-emerald-400" />
           </div>
           <p className="text-2xl font-black text-emerald-400 mt-2">
-            R$ {totalStockValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+            {formatValue(totalStockValue)}
           </p>
           <span className="text-[11px] text-brand-offwhite/50">Preço de tabela disponível</span>
         </div>
@@ -454,12 +483,12 @@ export default function LukeProdutosPage() {
             <thead>
               <tr className="bg-brand-blue/10 border-b border-brand-blue/30 text-brand-offwhite/70 text-xs uppercase tracking-wider">
                 <th className="p-4 font-medium w-16">Foto</th>
-                <th className="p-4 font-medium">Produto & Marca</th>
+                <th className="p-4 font-medium">Produto</th>
                 <th className="p-4 font-medium">Categoria</th>
-                <th className="p-4 font-medium">Preço Tabela</th>
+                <th className="p-4 font-medium">Preço</th>
                 <th className="p-4 font-medium">Custo</th>
                 <th className="p-4 font-medium">Estoque</th>
-                <th className="p-4 font-medium">Trava Rota</th>
+                <th className="p-4 font-medium">Cargas</th>
                 <th className="p-4 font-medium text-right">Ações</th>
               </tr>
             </thead>
@@ -512,13 +541,13 @@ export default function LukeProdutosPage() {
 
                   {/* Preço de Tabela */}
                   <td className="p-4 font-mono font-bold text-brand-gold">
-                    R$ {prod.price.toFixed(2)}
+                    {formatValue(prod.price)}
                     <span className="text-[10px] text-brand-offwhite/40 ml-1 font-normal">/{prod.unit}</span>
                   </td>
 
                   {/* Custo */}
                   <td className="p-4 font-mono text-xs text-brand-offwhite/60">
-                    {prod.costPrice ? `R$ ${prod.costPrice.toFixed(2)}` : "---"}
+                    {prod.costPrice ? formatValue(prod.costPrice) : "---"}
                   </td>
 
                   {/* Estoque */}
@@ -595,7 +624,7 @@ export default function LukeProdutosPage() {
               </div>
               <div>
                 <h3 className="text-xl font-bold text-brand-offwhite">
-                  {editingProduct ? "Editar Produto & Imagem" : "Cadastrar Novo Produto"}
+                  {editingProduct ? "Editar Produto" : "Novo Produto"}
                 </h3>
                 <p className="text-xs text-brand-offwhite/60">
                   Defina a marca, foto ilustrativa, categoria e regras de estoque.
@@ -608,7 +637,7 @@ export default function LukeProdutosPage() {
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                    Marca do Produto
+                    Marca
                   </label>
                   <select
                     value={formData.brand || "LUKE Brasil"}
@@ -625,7 +654,7 @@ export default function LukeProdutosPage() {
 
                 <div className="col-span-2">
                   <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                    Nome Completo do Produto
+                    Nome do Produto
                   </label>
                   <input
                     type="text"
@@ -641,7 +670,7 @@ export default function LukeProdutosPage() {
               {/* URL da Imagem com Preview */}
               <div>
                 <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                  URL da Foto do Produto
+                  Foto do Produto (URL)
                 </label>
                 <div className="flex space-x-3 items-center">
                   <div className="w-12 h-12 rounded-xl bg-brand-black border border-brand-blue/40 overflow-hidden shrink-0 flex items-center justify-center">
@@ -689,7 +718,7 @@ export default function LukeProdutosPage() {
 
                 <div>
                   <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                    Apresentação / Unidade
+                    Unidade
                   </label>
                   <input
                     type="text"
@@ -702,7 +731,7 @@ export default function LukeProdutosPage() {
 
                 <div>
                   <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                    Código Interno
+                    Código
                   </label>
                   <input
                     type="text"
@@ -718,7 +747,7 @@ export default function LukeProdutosPage() {
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                    Preço de Tabela (R$)
+                    Preço (R$)
                   </label>
                   <input
                     type="number"
@@ -732,7 +761,7 @@ export default function LukeProdutosPage() {
 
                 <div>
                   <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                    Preço de Custo (R$)
+                    Custo (R$)
                   </label>
                   <input
                     type="number"
@@ -791,7 +820,7 @@ export default function LukeProdutosPage() {
                       onChange={(e) => setFormData({ ...formData, blockedForLoading: e.target.checked })}
                       className="rounded bg-brand-black border-brand-blue/50 text-brand-gold focus:ring-brand-gold"
                     />
-                    <span>Bloquear para Carregamento</span>
+                    <span>Bloquear Cargas</span>
                   </label>
                 </div>
               </div>

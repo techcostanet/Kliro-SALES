@@ -22,10 +22,13 @@ import {
   Check,
   Tag,
   Users,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { collection, getDocs, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import initialCategories from "@/lib/financial_categories.json";
+import { usePrivacy } from "@/lib/privacyContext";
 
 export interface PayableItem {
   id: string;
@@ -191,6 +194,7 @@ const INITIAL_RECEIVABLES: ReceivableItem[] = [
 ];
 
 export default function LukeFinanceiroPage() {
+  const { hideValues, togglePrivacy, formatValue } = usePrivacy();
   const [activeTab, setActiveTab] = useState<"PAGAR" | "RECEBER" | "FLUXO" | "CATEGORIAS">("PAGAR");
   const [payables, setPayables] = useState<PayableItem[]>(INITIAL_PAYABLES);
   const [receivables, setReceivables] = useState<ReceivableItem[]>(INITIAL_RECEIVABLES);
@@ -253,23 +257,22 @@ export default function LukeFinanceiroPage() {
     loadFinData();
   }, []);
 
-  // Salvar Nova Conta a Pagar
+  // Lançar Conta a Pagar
   const handleSavePayable = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!payableForm.description?.trim()) return;
 
-    const cat = categories.find((c) => c.id === payableForm.categoryId) || categories[0];
-
+    const catObj = categories.find((c) => c.id === payableForm.categoryId);
     const newPayable: PayableItem = {
       id: `pay-${Date.now()}`,
       description: payableForm.description.trim(),
-      categoryId: cat.id,
-      categoryName: cat.name,
-      supplier: payableForm.supplier?.trim() || "Fornecedor Geral",
+      categoryId: payableForm.categoryId || "CAT-001",
+      categoryName: catObj?.name || "Despesa Operacional",
+      supplier: payableForm.supplier?.trim() || "Diversos",
       amount: Number(payableForm.amount || 0),
       dueDate: payableForm.dueDate || new Date().toISOString().split("T")[0],
       competence: payableForm.competence || "08/2026",
-      status: payableForm.status || "PENDING",
+      status: "PENDING",
       recurrence: Boolean(payableForm.recurrence),
       notes: payableForm.notes || "",
     };
@@ -279,19 +282,33 @@ export default function LukeFinanceiroPage() {
     try {
       await setDoc(doc(db, `tenants/${tenantId}/payables`, newPayable.id), {
         ...newPayable,
-        updatedAt: new Date(),
+        createdAt: new Date(),
       });
     } catch (e) {}
 
     setIsPayableModalOpen(false);
+    setPayableForm({
+      description: "",
+      categoryId: "CAT-001",
+      supplier: "",
+      amount: 100,
+      dueDate: new Date().toISOString().split("T")[0],
+      competence: "08/2026",
+      status: "PENDING",
+      recurrence: false,
+      notes: "",
+    });
+    setSyncMessage("✅ Conta a pagar lançada com sucesso!");
+    setTimeout(() => setSyncMessage(null), 4000);
   };
 
-  // Baixa / Pagar Conta
+  // Dar baixa em conta a pagar
   const handlePayPayable = async (item: PayableItem) => {
+    const today = new Date().toISOString().split("T")[0];
     const updated: PayableItem = {
       ...item,
       status: "PAID",
-      paymentDate: new Date().toISOString().split("T")[0],
+      paymentDate: today,
       paymentMethod: "PIX",
     };
 
@@ -300,20 +317,24 @@ export default function LukeFinanceiroPage() {
     try {
       await setDoc(
         doc(db, `tenants/${tenantId}/payables`, item.id),
-        { status: "PAID", paymentDate: updated.paymentDate, paymentMethod: "PIX", updatedAt: new Date() },
+        { status: "PAID", paymentDate: today, paymentMethod: "PIX", updatedAt: new Date() },
         { merge: true }
       );
     } catch (e) {}
+
+    setSyncMessage(`✅ Pagamento de ${formatValue(item.amount)} confirmado!`);
+    setTimeout(() => setSyncMessage(null), 4000);
   };
 
-  // Dar Baixa no P.A. (Receber de Barbearia)
+  // Abrir Modal de Baixa de P.A.
   const handleOpenReceiveModal = (rec: ReceivableItem) => {
     setSelectedReceivable(rec);
-    setReceivePaymentMethod("PIX");
     setReceiveDate(new Date().toISOString().split("T")[0]);
+    setReceivePaymentMethod("PIX");
     setIsReceiveModalOpen(true);
   };
 
+  // Confirmar Baixa de P.A. (Recebimento)
   const handleConfirmReceive = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedReceivable) return;
@@ -360,7 +381,7 @@ export default function LukeFinanceiroPage() {
 
     setIsReceiveModalOpen(false);
     setSelectedReceivable(null);
-    setSyncMessage(`✅ Recebimento de R$ ${updated.amount.toFixed(2)} registrado e lançado no Caixa!`);
+    setSyncMessage(`✅ Recebimento de ${formatValue(updated.amount)} registrado e lançado no Caixa!`);
     setTimeout(() => setSyncMessage(null), 4000);
   };
 
@@ -385,30 +406,42 @@ export default function LukeFinanceiroPage() {
 
   return (
     <div className="space-y-8">
-      {/* Header */}
+      {/* Header com Nomes de 1 Palavra */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <div className="flex items-center space-x-3">
-            <h2 className="text-3xl font-extrabold text-brand-offwhite">
-              Gestão Financeira & DRE
-            </h2>
+            <h2 className="text-3xl font-extrabold text-brand-offwhite">Financeiro</h2>
             <span className="bg-brand-gold/20 text-brand-gold text-xs px-2.5 py-1 rounded-full font-bold border border-brand-gold/30">
-              LUKE Brasil
+              DRE & Caixa
             </span>
           </div>
           <p className="text-brand-offwhite/60 text-sm mt-1">
-            Contas a Pagar, Contas a Receber (P.A.s de Barbearias), Fluxo de Caixa e DRE de Distribuição.
+            Contas a Pagar, Receber (P.A. de Salões), Fluxo de Caixa e DRE de Distribuição.
           </p>
         </div>
 
-        <div className="flex items-center space-x-3 w-full sm:w-auto">
+        <div className="flex items-center space-x-2 w-full sm:w-auto">
+          {/* Botão de Alternar Modo Privacidade */}
+          <button
+            onClick={togglePrivacy}
+            className={`flex items-center space-x-1.5 px-3 py-2.5 rounded-xl text-xs font-bold border transition ${
+              hideValues
+                ? "bg-brand-gold/20 text-brand-gold border-brand-gold/40"
+                : "bg-brand-graphite text-brand-offwhite/70 border-brand-blue/30 hover:text-brand-offwhite"
+            }`}
+            title={hideValues ? "Mostrar Valores" : "Ocultar Valores"}
+          >
+            {hideValues ? <EyeOff size={16} /> : <Eye size={16} />}
+            <span>{hideValues ? "Oculto" : "Visível"}</span>
+          </button>
+
           {activeTab === "PAGAR" && (
             <button
               onClick={() => setIsPayableModalOpen(true)}
-              className="flex-1 sm:flex-none flex items-center justify-center space-x-2 bg-brand-gold text-brand-black px-4 py-2.5 rounded-xl font-extrabold hover:bg-yellow-500 transition shadow-lg text-sm"
+              className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-brand-gold text-brand-black px-4 py-2.5 rounded-xl font-extrabold hover:bg-yellow-500 transition shadow-lg text-xs shrink-0"
             >
-              <Plus size={18} />
-              <span>Nova Conta a Pagar</span>
+              <Plus size={16} />
+              <span>Nova Despesa</span>
             </button>
           )}
         </div>
@@ -426,50 +459,50 @@ export default function LukeFinanceiroPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">P.A.s a Receber (Prazo)</span>
+            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Receber (Prazo)</span>
             <ArrowDownLeft size={18} className="text-purple-400" />
           </div>
           <p className="text-2xl font-black text-purple-400 mt-2">
-            R$ {totalReceivablePending.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+            {formatValue(totalReceivablePending)}
           </p>
           <span className="text-[11px] text-brand-offwhite/50">Vendas a prazo em rotas</span>
         </div>
 
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Contas a Pagar (Aberto)</span>
+            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Pagar (Aberto)</span>
             <ArrowUpRight size={18} className="text-amber-400" />
           </div>
           <p className="text-2xl font-black text-amber-400 mt-2">
-            R$ {totalPayablePending.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+            {formatValue(totalPayablePending)}
           </p>
           <span className="text-[11px] text-brand-offwhite/50">Fornecedores, salários e rotas</span>
         </div>
 
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Total Liquidado (Entradas)</span>
+            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Entradas (Mês)</span>
             <DollarSign size={18} className="text-emerald-400" />
           </div>
           <p className="text-2xl font-black text-emerald-400 mt-2">
-            R$ {totalReceivableReceived.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+            {formatValue(totalReceivableReceived)}
           </p>
           <span className="text-[11px] text-emerald-400/80 font-medium">Entrado no Caixa este mês</span>
         </div>
 
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Saldo Operacional Líquido</span>
+            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Saldo Líquido</span>
             <Wallet size={18} className="text-brand-gold" />
           </div>
           <p className={`text-2xl font-black mt-2 ${netOperationalBalance >= 0 ? "text-brand-gold" : "text-rose-400"}`}>
-            R$ {netOperationalBalance.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+            {formatValue(netOperationalBalance)}
           </p>
           <span className="text-[11px] text-brand-offwhite/50">Recebido (-) Despesas Pagas</span>
         </div>
       </div>
 
-      {/* Tabs de Navegação */}
+      {/* Tabs de Navegação de Palavra Única */}
       <div className="flex border-b border-brand-blue/30 space-x-2">
         <button
           onClick={() => setActiveTab("PAGAR")}
@@ -480,7 +513,7 @@ export default function LukeFinanceiroPage() {
           }`}
         >
           <ArrowUpRight size={16} />
-          <span>Contas a Pagar ({payables.length})</span>
+          <span>Pagar ({payables.length})</span>
         </button>
 
         <button
@@ -492,7 +525,7 @@ export default function LukeFinanceiroPage() {
           }`}
         >
           <ArrowDownLeft size={16} />
-          <span>Contas a Receber / P.A. ({receivables.length})</span>
+          <span>Receber ({receivables.length})</span>
         </button>
 
         <button
@@ -504,7 +537,7 @@ export default function LukeFinanceiroPage() {
           }`}
         >
           <FileSpreadsheet size={16} />
-          <span>DRE & Fluxo Operacional</span>
+          <span>DRE</span>
         </button>
 
         <button
@@ -555,11 +588,11 @@ export default function LukeFinanceiroPage() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-brand-blue/10 border-b border-brand-blue/30 text-brand-offwhite/70 text-xs uppercase tracking-wider">
-                  <th className="p-4 font-medium">Descrição da Despesa</th>
+                  <th className="p-4 font-medium">Descrição</th>
                   <th className="p-4 font-medium">Categoria</th>
-                  <th className="p-4 font-medium">Fornecedor / Favorecido</th>
+                  <th className="p-4 font-medium">Fornecedor</th>
                   <th className="p-4 font-medium">Vencimento</th>
-                  <th className="p-4 font-medium">Valor (R$)</th>
+                  <th className="p-4 font-medium">Valor</th>
                   <th className="p-4 font-medium">Status</th>
                   <th className="p-4 font-medium text-right">Ação</th>
                 </tr>
@@ -603,7 +636,7 @@ export default function LukeFinanceiroPage() {
                       </td>
 
                       <td className="p-4 font-mono font-bold text-amber-400">
-                        R$ {item.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        {formatValue(item.amount)}
                       </td>
 
                       <td className="p-4">
@@ -627,7 +660,7 @@ export default function LukeFinanceiroPage() {
                             className="px-3 py-1.5 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-xs font-bold hover:bg-green-500/30 transition flex items-center space-x-1 ml-auto"
                           >
                             <Check size={14} />
-                            <span>Dar Baixa (Pagar)</span>
+                            <span>Baixar</span>
                           </button>
                         ) : (
                           <span className="text-xs text-brand-offwhite/40 flex items-center justify-end space-x-1">
@@ -680,13 +713,13 @@ export default function LukeFinanceiroPage() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-brand-blue/10 border-b border-brand-blue/30 text-brand-offwhite/70 text-xs uppercase tracking-wider">
-                  <th className="p-4 font-medium">Barbearia / Salão</th>
+                  <th className="p-4 font-medium">Salão</th>
                   <th className="p-4 font-medium">Rota</th>
                   <th className="p-4 font-medium">Vendedor</th>
-                  <th className="p-4 font-medium">Data Agendada (P.A.)</th>
-                  <th className="p-4 font-medium">Valor (R$)</th>
+                  <th className="p-4 font-medium">Vencimento</th>
+                  <th className="p-4 font-medium">Valor</th>
                   <th className="p-4 font-medium">Status</th>
-                  <th className="p-4 font-medium text-right">Ação de Baixa</th>
+                  <th className="p-4 font-medium text-right">Ação</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-brand-blue/10 text-sm">
@@ -736,7 +769,7 @@ export default function LukeFinanceiroPage() {
                       </td>
 
                       <td className="p-4 font-mono font-bold text-purple-400">
-                        R$ {item.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        {formatValue(item.amount)}
                       </td>
 
                       <td className="p-4">
@@ -768,12 +801,12 @@ export default function LukeFinanceiroPage() {
                             className="px-3 py-1.5 bg-brand-gold text-brand-black rounded-lg text-xs font-extrabold hover:bg-yellow-500 transition shadow-md flex items-center space-x-1 ml-auto"
                           >
                             <DollarSign size={14} />
-                            <span>Receber P.A. (Baixar)</span>
+                            <span>Baixar</span>
                           </button>
                         ) : (
                           <span className="text-xs text-brand-offwhite/40 flex items-center justify-end space-x-1">
                             <CheckCircle2 size={14} className="text-green-400" />
-                            <span>Entrado no Caixa</span>
+                            <span>Caixa</span>
                           </span>
                         )}
                       </td>
@@ -785,64 +818,60 @@ export default function LukeFinanceiroPage() {
         </div>
       )}
 
-      {/* ABA 3: DRE & FLUXO OPERACIONAL */}
+      {/* ABA 3: DRE & FLUXO */}
       {activeTab === "FLUXO" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 bg-brand-graphite p-6 rounded-2xl border border-brand-blue/30 shadow-xl space-y-6">
             <h3 className="text-lg font-bold text-brand-offwhite flex items-center space-x-2">
               <FileSpreadsheet className="text-brand-gold" size={20} />
-              <span>DRE Operacional Simplificado (Mês Atual)</span>
+              <span>DRE Operacional</span>
             </h3>
 
             <div className="space-y-3 font-mono text-sm divide-y divide-brand-blue/20">
               <div className="flex justify-between items-center py-2 text-green-400 font-bold">
-                <span>(+) Faturamento Bruto de Rotas & P.A.s</span>
-                <span>R$ {(totalReceivableReceived + 18500).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                <span>(+) Faturamento Bruto</span>
+                <span>{formatValue(totalReceivableReceived + 18500)}</span>
               </div>
 
               <div className="flex justify-between items-center py-2 text-brand-offwhite/70 pl-4">
                 <span>• Vendas Pronta-Entrega (À Vista / Pix)</span>
-                <span>R$ 18.500,00</span>
+                <span>{formatValue(18500.0)}</span>
               </div>
 
               <div className="flex justify-between items-center py-2 text-brand-offwhite/70 pl-4">
                 <span>• Recebimentos de P.A. (Prazo Liquidado)</span>
-                <span>R$ {totalReceivableReceived.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                <span>{formatValue(totalReceivableReceived)}</span>
               </div>
 
               <div className="flex justify-between items-center py-2 text-amber-400 font-bold">
                 <span>(-) Custo Operacional & Despesas Pagas</span>
-                <span>- R$ {totalPayablePaid.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                <span>- {formatValue(totalPayablePaid)}</span>
               </div>
 
               <div className="flex justify-between items-center py-2 text-brand-offwhite/70 pl-4">
                 <span>• Fornecedores & Fábrica</span>
-                <span>- R$ 0,00 (Pendente)</span>
+                <span>- {formatValue(0.0)} (Pendente)</span>
               </div>
 
               <div className="flex justify-between items-center py-2 text-brand-offwhite/70 pl-4">
                 <span>• Combustível, Alimentação e Frotas</span>
-                <span>- R$ 545,00</span>
+                <span>- {formatValue(545.0)}</span>
               </div>
 
               <div className="flex justify-between items-center py-2 text-brand-offwhite/70 pl-4">
                 <span>• Aluguel, Galpão e Fixos</span>
-                <span>- R$ 3.200,00</span>
+                <span>- {formatValue(3200.0)}</span>
               </div>
 
               <div className="flex justify-between items-center py-3 text-brand-gold font-extrabold text-base bg-brand-black/40 px-3 rounded-lg">
                 <span>(=) RESULTADO OPERACIONAL LÍQUIDO</span>
-                <span>
-                  R$ {(18500 + totalReceivableReceived - totalPayablePaid).toLocaleString("pt-BR", {
-                    minimumFractionDigits: 2,
-                  })}
-                </span>
+                <span>{formatValue(18500 + totalReceivableReceived - totalPayablePaid)}</span>
               </div>
             </div>
           </div>
 
           <div className="bg-brand-graphite p-6 rounded-2xl border border-brand-blue/30 shadow-xl space-y-4">
-            <h3 className="text-lg font-bold text-brand-offwhite">Ciclo Operacional LUKE</h3>
+            <h3 className="text-lg font-bold text-brand-offwhite">Ciclo LUKE</h3>
             <p className="text-xs text-brand-offwhite/60">
               O fechamento comercial da distribuidora funciona no ciclo semanal de:
             </p>
@@ -856,15 +885,15 @@ export default function LukeFinanceiroPage() {
             <div className="space-y-2 pt-2">
               <div className="flex justify-between text-xs text-brand-offwhite/80">
                 <span>Alisson (Montana):</span>
-                <span className="font-bold text-brand-gold">R$ 14.820,00</span>
+                <span className="font-bold text-brand-gold">{formatValue(14820.0)}</span>
               </div>
               <div className="flex justify-between text-xs text-brand-offwhite/80">
                 <span>Alexandre (Clio):</span>
-                <span className="font-bold text-brand-gold">R$ 11.450,00</span>
+                <span className="font-bold text-brand-gold">{formatValue(11450.0)}</span>
               </div>
               <div className="flex justify-between text-xs text-brand-offwhite/80">
                 <span>Lucas (Strada):</span>
-                <span className="font-bold text-brand-gold">R$ 8.920,00</span>
+                <span className="font-bold text-brand-gold">{formatValue(8920.0)}</span>
               </div>
             </div>
           </div>
@@ -874,7 +903,7 @@ export default function LukeFinanceiroPage() {
       {/* ABA 4: CATEGORIAS */}
       {activeTab === "CATEGORIAS" && (
         <div className="bg-brand-graphite rounded-2xl border border-brand-blue/30 shadow-xl p-6 space-y-4">
-          <h3 className="text-lg font-bold text-brand-offwhite">Categorias do Plano de Contas LUKE Brasil</h3>
+          <h3 className="text-lg font-bold text-brand-offwhite">Categorias Financeiras</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
             {categories.map((c) => (
               <div
@@ -900,7 +929,7 @@ export default function LukeFinanceiroPage() {
         </div>
       )}
 
-      {/* Modal Nova Conta a Pagar */}
+      {/* Modal Nova Despesa */}
       {isPayableModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-brand-black/80 backdrop-blur-sm">
           <div className="bg-brand-graphite w-full max-w-lg rounded-2xl border border-brand-blue/40 shadow-2xl p-6 relative max-h-[90vh] overflow-y-auto">
@@ -916,7 +945,7 @@ export default function LukeFinanceiroPage() {
                 <ArrowUpRight size={20} />
               </div>
               <div>
-                <h3 className="text-xl font-bold text-brand-offwhite">Lançar Conta a Pagar</h3>
+                <h3 className="text-xl font-bold text-brand-offwhite">Lançar Despesa</h3>
                 <p className="text-xs text-brand-offwhite/60">
                   Despesas operacionais, fornecedores, alimentação de rota e salários.
                 </p>
@@ -926,7 +955,7 @@ export default function LukeFinanceiroPage() {
             <form onSubmit={handleSavePayable} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                  Descrição da Despesa
+                  Descrição
                 </label>
                 <input
                   type="text"
@@ -941,7 +970,7 @@ export default function LukeFinanceiroPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                    Categoria Financeira
+                    Categoria
                   </label>
                   <select
                     value={payableForm.categoryId || "CAT-001"}
@@ -958,7 +987,7 @@ export default function LukeFinanceiroPage() {
 
                 <div>
                   <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                    Fornecedor / Favorecido
+                    Fornecedor
                   </label>
                   <input
                     type="text"
@@ -1022,7 +1051,7 @@ export default function LukeFinanceiroPage() {
                   className="rounded bg-brand-black border-brand-blue/50 text-brand-gold focus:ring-brand-gold"
                 />
                 <label htmlFor="recurrence" className="text-xs text-brand-offwhite/80 cursor-pointer">
-                  Conta fixa / recorrente mensal (Ex: Aluguel, Internet, Contabilidade)
+                  Conta fixa / recorrente mensal
                 </label>
               </div>
 
@@ -1035,7 +1064,7 @@ export default function LukeFinanceiroPage() {
                   value={payableForm.notes || ""}
                   onChange={(e) => setPayableForm({ ...payableForm, notes: e.target.value })}
                   className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold"
-                  placeholder="Número de nota fiscal, detalhes do pedido..."
+                  placeholder="Número de NF, dados de entrega..."
                 />
               </div>
 
@@ -1051,7 +1080,7 @@ export default function LukeFinanceiroPage() {
                   type="submit"
                   className="px-6 py-2 bg-brand-gold text-brand-black rounded-lg font-bold hover:bg-yellow-500 transition shadow-lg text-sm"
                 >
-                  Lançar Despesa
+                  Salvar Despesa
                 </button>
               </div>
             </form>
@@ -1059,7 +1088,7 @@ export default function LukeFinanceiroPage() {
         </div>
       )}
 
-      {/* Modal Baixa de P.A. (Receber de Barbearia) */}
+      {/* Modal Baixa de P.A. */}
       {isReceiveModalOpen && selectedReceivable && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-brand-black/80 backdrop-blur-sm">
           <div className="bg-brand-graphite w-full max-w-md rounded-2xl border border-brand-gold/40 shadow-2xl p-6 relative">
@@ -1089,14 +1118,14 @@ export default function LukeFinanceiroPage() {
                 Vendedor: {selectedReceivable.vendorName} • Rota: {selectedReceivable.routeId}
               </p>
               <p className="text-lg font-mono font-black text-green-400 pt-1">
-                R$ {selectedReceivable.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                {formatValue(selectedReceivable.amount)}
               </p>
             </div>
 
             <form onSubmit={handleConfirmReceive} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                  Data Efetiva do Recebimento
+                  Data do Recebimento
                 </label>
                 <input
                   type="date"
@@ -1109,7 +1138,7 @@ export default function LukeFinanceiroPage() {
 
               <div>
                 <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                  Forma de Pagamento Recebida
+                  Forma de Pagamento
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   <button
