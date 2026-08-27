@@ -22,6 +22,7 @@ import Link from "next/link";
 import { collection, getDocs, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { usePrivacy } from "@/lib/privacyContext";
+import { formatCurrency, formatNumberBR } from "@/lib/formatters";
 
 export interface RouteItem {
   id: string;
@@ -386,7 +387,7 @@ export default function LukeRotasPage() {
 
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Salões em Rota</span>
+            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Clientes em Rota</span>
             <Users size={18} className="text-purple-400" />
           </div>
           <p className="text-2xl font-black text-purple-400 mt-2">
@@ -401,7 +402,7 @@ export default function LukeRotasPage() {
             <DollarSign size={18} className="text-emerald-400" />
           </div>
           <p className="text-2xl font-black text-emerald-400 mt-2">
-            {formatValue(totalSalesAll)}
+            {formatValue(totalSalesAll, "currency")}
           </p>
           <span className="text-[11px] text-brand-offwhite/50">Vendas liquidadas</span>
         </div>
@@ -445,7 +446,7 @@ export default function LukeRotasPage() {
               <option value="ALL">Todos os Status</option>
               <option value="OPEN">Em Aberto (Rua)</option>
               <option value="CLOSED">Concluída</option>
-              <option value="SCHEDULED">Agendada</option>
+              <option value="SCHEDULED">Aguardando</option>
             </select>
           </div>
         </div>
@@ -498,7 +499,7 @@ export default function LukeRotasPage() {
                     <td className="p-4 w-44">
                       <div className="flex justify-between text-xs mb-1">
                         <span className="text-brand-offwhite/60">
-                          {route.completedVisits}/{route.totalClients} salões
+                          {route.completedVisits}/{route.totalClients} clientes
                         </span>
                         <span className="font-bold text-brand-gold">{percent}%</span>
                       </div>
@@ -511,7 +512,7 @@ export default function LukeRotasPage() {
                     </td>
 
                     <td className="p-4 font-mono font-bold text-emerald-400">
-                      {formatValue(route.totalSales)}
+                      {formatValue(route.totalSales, "currency")}
                     </td>
 
                     <td className="p-4">
@@ -521,14 +522,14 @@ export default function LukeRotasPage() {
                             ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
                             : route.status === "CLOSED"
                             ? "bg-green-500/10 text-green-400 border-green-500/20"
-                            : "bg-brand-blue/20 text-brand-offwhite/60 border-brand-blue/30"
+                            : "bg-blue-500/10 text-blue-300 border-blue-500/30"
                         }`}
                       >
                         {route.status === "OPEN"
                           ? "Em Rota"
                           : route.status === "CLOSED"
                           ? "Concluída"
-                          : "Agendada"}
+                          : "Aguardando"}
                       </span>
                     </td>
 
@@ -651,7 +652,7 @@ export default function LukeRotasPage() {
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                    Salões Previstos
+                    Clientes Previstos
                   </label>
                   <input
                     type="number"
@@ -682,7 +683,7 @@ export default function LukeRotasPage() {
                     onChange={(e: any) => setFormData({ ...formData, status: e.target.value })}
                     className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold"
                   >
-                    <option value="SCHEDULED">Agendada</option>
+                    <option value="SCHEDULED">Aguardando</option>
                     <option value="OPEN">Em Aberto (Rua)</option>
                     <option value="CLOSED">Concluída</option>
                   </select>

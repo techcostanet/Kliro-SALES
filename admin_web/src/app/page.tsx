@@ -166,7 +166,7 @@ export default function UnifiedLoginPage() {
 
       <div className="flex items-center space-x-2 text-xs text-slate-400 mt-6 relative z-10">
         <span className="font-mono font-bold text-indigo-600/80 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100/80">
-          v1.5.0
+          v1.6.0
         </span>
         <span>•</span>
         <span>Tech Costa Systems • Todos os direitos reservados</span>

@@ -107,7 +107,7 @@ export default function LukeOverviewPage() {
 
   return (
     <div className="space-y-8">
-      {/* Topo / Header com Rótulos de 1 Palavra */}
+      {/* Topo / Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <div className="flex items-center space-x-3">
@@ -117,7 +117,7 @@ export default function LukeOverviewPage() {
             </span>
           </div>
           <p className="text-brand-offwhite/60 text-sm mt-1">
-            Métricas de faturamento, rotas, salões atendidos e metas comerciais.
+            Métricas consolidadas de faturamento, rotas, clientes atendidos e metas comerciais.
           </p>
         </div>
 
@@ -160,7 +160,7 @@ export default function LukeOverviewPage() {
             </div>
           </div>
           <p className="text-2xl font-black text-brand-offwhite mt-3">
-            {formatValue(58420.0)}
+            {formatValue(58420.0, "currency")}
           </p>
           <div className="flex items-center space-x-1 text-[11px] text-emerald-400 mt-2 font-medium">
             <ArrowUpRight size={13} />
@@ -172,17 +172,17 @@ export default function LukeOverviewPage() {
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-lg relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-xs text-brand-offwhite/60 font-semibold uppercase tracking-wider">
-              Ticket
+              Ticket Médio
             </span>
             <div className="p-2 rounded-lg bg-brand-blue/30 text-brand-gold border border-brand-blue/40">
               <ShoppingBag size={16} />
             </div>
           </div>
           <p className="text-2xl font-black text-brand-gold mt-3">
-            {formatValue(347.7)}
+            {formatValue(347.7, "currency")}
           </p>
           <span className="text-[11px] text-brand-offwhite/50 block mt-2">
-            Média por salão visitado
+            Média por cliente visitado
           </span>
         </div>
 
@@ -190,17 +190,17 @@ export default function LukeOverviewPage() {
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-lg relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-xs text-brand-offwhite/60 font-semibold uppercase tracking-wider">
-              Receber
+              A Receber (P.A.)
             </span>
             <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20">
               <ArrowDownLeft size={16} />
             </div>
           </div>
           <p className="text-2xl font-black text-purple-400 mt-3">
-            {formatValue(5430.0)}
+            {formatValue(5430.0, "currency")}
           </p>
           <span className="text-[11px] text-purple-300/70 block mt-2">
-            18 salões com prazo aberto
+            18 clientes com prazo aberto
           </span>
         </div>
 
@@ -208,17 +208,17 @@ export default function LukeOverviewPage() {
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-lg relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-xs text-brand-offwhite/60 font-semibold uppercase tracking-wider">
-              Pagar
+              A Pagar
             </span>
             <div className="p-2 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20">
               <ArrowUpRight size={16} />
             </div>
           </div>
           <p className="text-2xl font-black text-rose-400 mt-3">
-            {formatValue(3745.0)}
+            {formatValue(3745.0, "currency")}
           </p>
           <span className="text-[11px] text-rose-300/70 block mt-2">
-            Fábricas & Despesas da rota
+            Fábricas & Despesas operacionais
           </span>
         </div>
 
@@ -226,30 +226,30 @@ export default function LukeOverviewPage() {
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-lg relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-xs text-brand-offwhite/60 font-semibold uppercase tracking-wider">
-              Caixa
+              Caixa Líquido
             </span>
             <div className="p-2 rounded-lg bg-teal-500/10 text-teal-400 border border-teal-500/20">
               <Wallet size={16} />
             </div>
           </div>
           <p className="text-2xl font-black text-teal-400 mt-3">
-            {formatValue(54675.0)}
+            {formatValue(54675.0, "currency")}
           </p>
           <span className="text-[11px] text-teal-300/70 block mt-2">
-            Saldo operacional real
+            Saldo operacional consolidado
           </span>
         </div>
       </div>
 
       {/* BLOCO 2: KPIS OPERACIONAIS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Cobertura de Salões */}
+        {/* Cobertura de Clientes */}
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md flex items-center space-x-4">
           <div className="w-12 h-12 rounded-xl bg-brand-blue/30 border border-brand-gold/30 flex items-center justify-center text-brand-gold shrink-0">
             <Store size={24} />
           </div>
           <div>
-            <p className="text-xs text-brand-offwhite/60 font-semibold uppercase">Salões</p>
+            <p className="text-xs text-brand-offwhite/60 font-semibold uppercase">Clientes</p>
             <p className="text-xl font-extrabold text-brand-offwhite mt-0.5">168 / 559</p>
             <span className="text-[11px] text-brand-gold font-bold">30,0% no ciclo</span>
           </div>
@@ -331,17 +331,17 @@ export default function LukeOverviewPage() {
                           </span>
                         </div>
                         <p className="text-xs text-brand-offwhite/50 mt-0.5">
-                          {v.routes} • {v.visitsCount} salões
+                          {v.routes} • {v.visitsCount} clientes
                         </p>
                       </div>
                     </div>
 
                     <div className="text-right">
                       <p className="text-sm font-black text-brand-offwhite">
-                        {formatValue(v.totalSales)}
+                        {formatValue(v.totalSales, "currency")}
                       </p>
                       <p className="text-[11px] text-emerald-400 font-medium">
-                        Comissão: {formatValue(v.commission)}
+                        Comissão: {formatValue(v.commission, "currency")}
                       </p>
                     </div>
                   </div>
@@ -349,7 +349,7 @@ export default function LukeOverviewPage() {
                   {/* Barra de Progresso da Meta */}
                   <div className="space-y-1">
                     <div className="flex justify-between text-[11px] text-brand-offwhite/60">
-                      <span>Meta: {formatValue(v.target)}</span>
+                      <span>Meta: {formatValue(v.target, "currency")}</span>
                       <span className="font-bold text-brand-gold">{percent}%</span>
                     </div>
                     <div className="w-full bg-brand-graphite h-2 rounded-full overflow-hidden border border-brand-blue/20">
@@ -409,7 +409,7 @@ export default function LukeOverviewPage() {
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-xs font-black text-brand-gold">
-                    {formatValue(prod.revenue)}
+                    {formatValue(prod.revenue, "currency")}
                   </p>
                 </div>
               </div>

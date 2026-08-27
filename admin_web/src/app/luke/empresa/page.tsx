@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Building2,
   Save,
@@ -13,6 +13,7 @@ import {
   CreditCard,
   User,
   Sparkles,
+  Upload,
 } from "lucide-react";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -45,7 +46,7 @@ const INITIAL_COMPANY: CompanySettings = {
   tradeName: "LUKE Brasil",
   cnpj: "34.892.123/0001-90",
   stateRegistration: "003.892.144.0089",
-  logoUrl: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=200&auto=format&fit=crop&q=80",
+  logoUrl: "/images/luke-logo.png",
   phone: "(31) 3344-5566",
   whatsapp: "(31) 98888-0001",
   email: "contato@luke.com",
@@ -59,13 +60,14 @@ const INITIAL_COMPANY: CompanySettings = {
   neighborhood: "Centro",
   city: "Belo Horizonte",
   state: "MG",
-  notes: "Distribuição exclusiva de cosméticos para salões de beleza e barbearias.",
+  notes: "Distribuição exclusiva de cosméticos para clientes profissionais.",
 };
 
 export default function LukeEmpresaPage() {
   const [formData, setFormData] = useState<CompanySettings>(INITIAL_COMPANY);
   const [loading, setLoading] = useState(false);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const tenantId = "tenant_luke_001";
 
@@ -82,6 +84,21 @@ export default function LukeEmpresaPage() {
     };
     fetchCompanyData();
   }, []);
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.includes("image/jpeg") && !file.type.includes("image/png") && !file.type.includes("image/webp")) {
+        alert("Por favor, selecione uma imagem no formato JPG ou PNG.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData((prev) => ({ ...prev, logoUrl: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -165,7 +182,7 @@ export default function LukeEmpresaPage() {
                   alt="Logo"
                   className="w-full h-full object-contain rounded-xl"
                   onError={(e: any) => {
-                    e.target.src = "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=200&auto=format&fit=crop&q=80";
+                    e.target.src = "/images/luke-logo.png";
                   }}
                 />
               ) : (
@@ -173,17 +190,44 @@ export default function LukeEmpresaPage() {
               )}
             </div>
 
-            <div className="flex-1 space-y-2 w-full">
-              <label className="block text-xs font-semibold text-brand-offwhite/70">
-                URL da Logomarca (PNG, JPG ou SVG)
-              </label>
-              <input
-                type="url"
-                value={formData.logoUrl || ""}
-                onChange={(e) => setFormData({ ...formData, logoUrl: e.target.value })}
-                className="w-full px-4 py-2.5 bg-brand-black border border-brand-blue/40 rounded-xl text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold font-mono"
-                placeholder="https://suaempresa.com/logo.png"
-              />
+            <div className="flex-1 space-y-3 w-full">
+              <div className="flex items-center gap-2">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleImageUpload}
+                  accept="image/png, image/jpeg, image/webp"
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center space-x-1.5 px-4 py-2 bg-brand-gold text-brand-black text-xs font-extrabold rounded-lg hover:bg-yellow-500 transition shadow"
+                >
+                  <Upload size={15} />
+                  <span>Fazer Upload de Foto (JPG/PNG)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, logoUrl: "/images/luke-logo.png" })}
+                  className="px-3 py-2 bg-brand-blue/40 border border-brand-gold/30 text-brand-offwhite text-xs font-bold rounded-lg hover:bg-brand-blue/60 transition"
+                >
+                  Usar Logo Oficial LUKE
+                </button>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
+                  Ou digite a URL da Logomarca (PNG, JPG ou SVG)
+                </label>
+                <input
+                  type="text"
+                  value={formData.logoUrl || ""}
+                  onChange={(e) => setFormData({ ...formData, logoUrl: e.target.value })}
+                  className="w-full px-4 py-2 bg-brand-black border border-brand-blue/40 rounded-xl text-xs text-brand-offwhite focus:outline-none focus:border-brand-gold font-mono"
+                  placeholder="https://suaempresa.com/logo.png ou /images/luke-logo.png"
+                />
+              </div>
               <p className="text-[11px] text-brand-offwhite/40">
                 Esta logo será exibida nos relatórios, pedidos do Modo Rua e no cabeçalho do painel.
               </p>

@@ -4,7 +4,44 @@ Todas as melhorias, novidades e correções notáveis deste projeto serão docum
 
 ## [Unreleased]
 
-## [1.5.0] - 2026-08-26
+## [1.6.0] - 2026-08-27
+### Added
+- **Upload de Imagens de Clientes (JPG/PNG/WebP) & Imagem Padrão LUKE (`/luke/clientes`)**:
+  - Modal de clientes com botão de upload de foto local (JPG/PNG) com conversão instantânea para Base64 e pré-visualização.
+  - Imagem e logo oficial da LUKE Brasil adicionados ao sistema (`/images/luke-logo.png`).
+- **Limite de Compras Mensal do Cliente (`/luke/clientes`)**:
+  - Renomeação do antigo "Limite P.A." para "Limite de Compras Mensal (R$)", com formatação brasileira e controle visual.
+- **Cadastro de Compradores Livre de DDD & WhatsApp com DDI 55 Automático (`/luke/clientes` & `/luke/vendedores`)**:
+  - Campo de telefone limpo para livre preenchimento pelo vendedor e geração de link `https://wa.me/55...` garantindo conformidade com o WhatsApp.
+- **Campo "Aceita P.A. (Sim / Não)" (`/luke/clientes`)**:
+  - Nova flag booleana `acceptsPA` no cadastro de clientes e badge destacada na tabela de listagem.
+- **Recorrência Inteligente de Despesas com Seletor de Meses (`/luke/financeiro`)**:
+  - Ao marcar despesa recorrente, o usuário seleciona a quantidade de meses (2 a 36 meses), gerando automaticamente todas as parcelas (`1/N`, `2/N`...) com seus devidos vencimentos no fluxo.
+- **Busca Digital em Tempo Real para Categorias Financeiras (`/luke/financeiro`)**:
+  - Combobox com filtro instantâneo por digitação para seleção ágil de categorias no lançamento de despesas e receitas.
+- **Ampliação do Catálogo de Categorias Financeiras (`src/lib/financial_categories.json`)**:
+  - Expansão para 33 categorias detalhadas (despesas operacionais, tributárias, bancárias, logísticas e receitas).
+- **Lançamento de Despesa Já Paga / Baixada (`/luke/financeiro`)**:
+  - Toggle no modal de despesa para permitir lançar uma despesa já liquidada no ato da criação (definindo status `PAID`, data real de pagamento e forma utilizada).
+- **Estorno de Baixa com Auditoria e Restrição de Segurança (`/luke/financeiro`)**:
+  - Modal de confirmação de estorno de pagamento exigindo preenchimento obrigatório de justificativa / observação.
+  - Validação de segurança garantindo que apenas administradores autorizados (`admin@luke.com`) realizem estornos com registro em log de auditoria (`auditTrail`).
+- **Destaque e Filtro de Contas Atrasadas / Vencidas (`/luke/financeiro`)**:
+  - Identificação visual instantânea (badge vermelha e indicador "Atrasado") para contas a pagar vencidas antes da data de hoje, além de filtro dedicado.
+- **Módulo Central de Formatação e Padronização Brasil (`src/lib/formatters.ts`)**:
+  - Funções centralizadas para formatação monetária (Real `R$ 1.234,56`), datas (`DD/MM/AAAA` e `DD/MM/AAAA HH:mm`), números e telefones com DDI 55.
+- **Seletores de Mês, Ano e Período em Cada Aba Financeira (`/luke/financeiro`)**:
+  - Filtros completos de Mês (Jan-Dez), Ano (2025-2027) e Presets de Período (*Este Mês, Mês Passado, Próximo Mês, Todo o Ano, Todos*) em Contas a Pagar, Contas a Receber, Caixa e Categorias.
+- **Cards de Métricas e KPIs de Contas a Receber por Forma de Pagamento (`/luke/financeiro`)**:
+  - 6 novos cards estatísticos no topo da aba Receber: P.A. Agendado, Cartão de Crédito/Débito, Pix & Dinheiro, Total em Aberto, Total Já Recebido e Total Atrasado.
+### Changed
+- **Generalização Global de "Salão/Salões" para "Cliente/Clientes" (Preparação para SaaS)**:
+  - Substituição global de termos e botões em todo o portal LUKE e rotas, permitindo que a plataforma opere de forma genérica como um SaaS multi-segmento.
+- **Status de Rota: Substituição de "Agendada" por "Aguardando" (`/luke/rotas`)**:
+  - Adequação da nomenclatura nos filtros, tabelas e modais de rotas.
+- **Remoção da Seção e Aba de DRE (`/luke/financeiro`)**:
+  - Foco total nas abas operacionais essenciais: Pagar, Receber, Caixa e Categorias.
+
 ### Added
 - **Modo Privacidade / Ocultar Valores Ativo por Padrão (`PrivacyContext`)**:
   - Valores monetários agora são ocultados por padrão no sistema (`R$ ••••••`) para evitar visualização indevida durante atendimentos.

@@ -8,7 +8,6 @@ import {
   Trash2,
   Shield,
   User,
-  Phone,
   Truck,
   DollarSign,
   CheckCircle2,
@@ -22,8 +21,8 @@ import {
 } from "lucide-react";
 import { collection, getDocs, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { formatWhatsAppUrl } from "../clientes/page";
 import { usePrivacy } from "@/lib/privacyContext";
+import { formatCurrency, formatPhoneBR, getWhatsAppLink } from "@/lib/formatters";
 
 export interface VendorItem {
   id: string;
@@ -116,7 +115,7 @@ export default function LukeVendedoresPage() {
     name: "",
     email: "",
     role: "VENDOR",
-    phone: "(31) 98888-0000",
+    phone: "",
     vehicle: "Fiat Strada",
     vehiclePlate: "LUK-1234",
     commissionRate: 8.0,
@@ -214,7 +213,7 @@ export default function LukeVendedoresPage() {
         name: "",
         email: "",
         role: "VENDOR",
-        phone: "(31) 98888-0000",
+        phone: "",
         vehicle: "Fiat Strada",
         vehiclePlate: "LUK-1234",
         commissionRate: 8.0,
@@ -236,7 +235,7 @@ export default function LukeVendedoresPage() {
       name: formData.name.trim(),
       email: formData.email.trim(),
       role: formData.role || "VENDOR",
-      phone: formData.phone || "(31) 99999-9999",
+      phone: formData.phone || "",
       vehicle: formData.vehicle || "Veículo Comercial",
       vehiclePlate: formData.vehiclePlate || "---",
       commissionRate: Number(formData.commissionRate || 8),
@@ -302,7 +301,7 @@ export default function LukeVendedoresPage() {
 
   return (
     <div className="space-y-8">
-      {/* Header com Nomes de 1 Palavra */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <div className="flex items-center space-x-3">
@@ -383,18 +382,18 @@ export default function LukeVendedoresPage() {
 
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Meta</span>
+            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Meta Total</span>
             <Target size={18} className="text-purple-400" />
           </div>
           <p className="text-2xl font-black text-purple-400 mt-2">
-            {formatValue(totalTarget)}
+            {formatValue(totalTarget, "currency")}
           </p>
           <span className="text-[11px] text-brand-offwhite/50">Faturamento alvo do time</span>
         </div>
 
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Comissão</span>
+            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Comissão Padrão</span>
             <DollarSign size={18} className="text-emerald-400" />
           </div>
           <p className="text-2xl font-black text-emerald-400 mt-2">8,0%</p>
@@ -463,15 +462,19 @@ export default function LukeVendedoresPage() {
                         <p className="text-brand-offwhite font-bold">{user.name}</p>
                         <p className="text-xs text-brand-offwhite/50">{user.email}</p>
                         <div className="mt-0.5">
-                          <a
-                            href={formatWhatsAppUrl(user.phone)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center space-x-1 text-[11px] text-green-400 font-mono hover:underline font-bold"
-                          >
-                            <MessageCircle size={11} className="text-green-400" />
-                            <span>{user.phone}</span>
-                          </a>
+                          {user.phone ? (
+                            <a
+                              href={getWhatsAppLink(user.phone)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center space-x-1 text-[11px] text-green-400 font-mono hover:underline font-bold"
+                            >
+                              <MessageCircle size={11} className="text-green-400" />
+                              <span>{formatPhoneBR(user.phone)}</span>
+                            </a>
+                          ) : (
+                            <span className="text-[11px] text-brand-offwhite/40 italic">Sem WhatsApp</span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -529,8 +532,8 @@ export default function LukeVendedoresPage() {
                     {user.commissionRate > 0 ? `${user.commissionRate.toFixed(1)}%` : "Fixo"}
                   </td>
 
-                  <td className="p-4 font-bold text-brand-offwhite text-xs">
-                    {user.monthlyTarget > 0 ? formatValue(user.monthlyTarget) : "---"}
+                  <td className="p-4 font-bold text-brand-offwhite text-xs font-mono">
+                    {user.monthlyTarget > 0 ? formatValue(user.monthlyTarget, "currency") : "---"}
                   </td>
 
                   <td className="p-4">
@@ -628,14 +631,14 @@ export default function LukeVendedoresPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                    WhatsApp
+                    WhatsApp (DDD + Número)
                   </label>
                   <input
                     type="text"
                     value={formData.phone || ""}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold"
-                    placeholder="(31) 98888-7777"
+                    placeholder="Ex: 31988887777"
                   />
                 </div>
 
