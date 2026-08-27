@@ -325,18 +325,18 @@ export default function LukeVendedoresPage() {
             </span>
           </div>
           <p className="text-brand-offwhite/60 text-sm mt-1">
-            Gestão completa da equipe, comissões, metas e cores personalizadas para a Agenda de Rotas.
+            Gestão completa da equipe, comissões, metas e cores personalizadas para a Gestão de Rotas.
           </p>
         </div>
 
         <div className="flex items-center space-x-2 w-full sm:w-auto">
-          {/* Atalho para Agenda de Rotas */}
+          {/* Atalho para Gestão de Rotas */}
           <Link
             href="/luke/rotas"
             className="flex items-center space-x-1.5 px-3 py-2.5 rounded-xl text-xs font-bold bg-brand-blue/30 text-brand-offwhite border border-brand-blue/50 hover:bg-brand-blue/50 transition shadow-xs"
           >
             <Calendar size={15} className="text-brand-gold" />
-            <span className="hidden sm:inline">Agenda de Rotas</span>
+            <span className="hidden sm:inline">Gestão de Rotas</span>
           </Link>
 
           {/* Botão de Alternar Modo Privacidade */}
@@ -630,7 +630,7 @@ export default function LukeVendedoresPage() {
                   {editingVendor ? "Editar Vendedor" : "Novo Vendedor"}
                 </h3>
                 <p className="text-xs text-brand-offwhite/60">
-                  Configure os dados, cor de identificação na agenda, veículo e metas.
+                  Configure os dados, cor de identificação nas rotas, veículo e metas.
                 </p>
               </div>
             </div>
@@ -666,12 +666,12 @@ export default function LukeVendedoresPage() {
                 </div>
               </div>
 
-              {/* Seletor de Cor do Vendedor (Google Agenda Style) */}
+              {/* Seletor de Cor do Vendedor */}
               <div className="p-3.5 bg-brand-black/60 rounded-xl border border-brand-blue/30 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <label className="flex items-center space-x-1.5 text-xs font-bold text-brand-gold uppercase tracking-wider">
                     <Palette size={14} />
-                    <span>Cor de Identificação no Sistema & Agenda</span>
+                    <span>Cor de Identificação no Sistema & Rotas</span>
                   </label>
                   <VendorBadge
                     vendorName={formData.name || "Preview"}
@@ -821,7 +821,7 @@ export default function LukeVendedoresPage() {
                   placeholder="Ex: R (Rotas R1 a R12), F, REP"
                 />
                 <p className="text-[11px] text-brand-offwhite/50">
-                  💡 A atribuição de dias específicos e rotas é realizada dinamicamente através da <strong>Agenda de Rotas</strong>.
+                  💡 A atribuição de dias específicos e rotas é realizada dinamicamente através da <strong>Gestão de Rotas</strong>.
                 </p>
               </div>
 

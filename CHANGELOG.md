@@ -4,6 +4,24 @@ Todas as melhorias, novidades e correções notáveis deste projeto serão docum
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-08-27
+### Added
+- **Logomarca Dinâmica da Empresa na Barra Lateral (`/luke`)**:
+  - A barra lateral agora busca a logomarca configurada no Firestore (`tenants/tenant_luke_001/settings/company`) e a exibe no cabeçalho superior no lugar do texto estático da empresa.
+- **Cartões Interativos de KPI com Drill-Down Matemático e Operacional (`/luke`)**:
+  - Todos os 9 indicadores da tela Visão (`Faturamento Total`, `Ticket Médio`, `A Receber`, `A Pagar`, `Caixa Líquido Previsto`, `Clientes`, `Frotas & Cargas`, `Positivação`, `Cargas`) agora são clicáveis.
+  - Modal dinâmico detalha fórmulas matemáticas, composição numérica, impacto operacional e links de ação direta.
+### Removed
+- **Remoção de Upload de Imagem de Clientes em Rotas (`/luke/clientes`)**:
+  - Formulário simplificado sem upload de foto, mantendo essa função exclusiva para o SaaS/Inquilinos. Tabela com insígnias por iniciais.
+- **Remoção do Campo "Ordem de Visita" (`/luke/clientes`)**:
+  - Exclusão do campo numérico e da coluna de ordem na tabela para ganho de espaço operacional útil.
+- **Eliminação de Botões Manuais de Sincronização (`/luke/clientes` & `/luke/rotas`)**:
+  - Removidos os botões de sincronização manual, pois todas as operações são salvas e lidas em tempo real diretamente no Firebase Firestore.
+### Changed
+- **Padronização Exclusiva para "Gestão de Rotas" (`/luke/rotas` & `/luke/vendedores`)**:
+  - Título padronizado para "Gestão de Rotas" e botões renomeados de "Agendar Rota" / "Salvar na Agenda" para "Nova Rota" e "Salvar Rota".
+
 ## [1.6.0] - 2026-08-27
 ### Added
 - **Upload de Imagens de Clientes (JPG/PNG/WebP) & Imagem Padrão LUKE (`/luke/clientes`)**:

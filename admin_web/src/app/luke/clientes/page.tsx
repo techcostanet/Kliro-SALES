@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Store,
   Plus,
@@ -9,7 +9,6 @@ import {
   Trash2,
   MapPin,
   CheckCircle2,
-  RefreshCw,
   X,
   CreditCard,
   Building2,
@@ -18,12 +17,10 @@ import {
   Eye,
   EyeOff,
   UserPlus,
-  Upload,
-  Image as ImageIcon,
   Check,
   AlertCircle,
 } from "lucide-react";
-import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch } from "firebase/firestore";
+import { collection, getDocs, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import initialClients from "@/lib/clients_catalog.json";
 import { usePrivacy } from "@/lib/privacyContext";
@@ -86,12 +83,10 @@ const COMMERCIAL_CONDITIONS = [
 
 export default function LukeClientesPage() {
   const { hideValues, togglePrivacy, formatValue } = usePrivacy();
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [clients, setClients] = useState<ClientItem[]>(() => {
     return (initialClients as any[]).map((c) => ({
       ...c,
-      imageUrl: c.imageUrl || (c.name?.toLowerCase().includes("luke") ? "/images/luke-logo.png" : undefined),
       acceptsPA: c.acceptsPA !== undefined ? c.acceptsPA : (c.conferenceInfo?.toLowerCase().includes("prazo") ?? true),
       buyers: c.buyers && c.buyers.length > 0 ? c.buyers : [{ name: c.buyer || "Proprietário", phone: c.phone || "" }],
       cep: c.cep || "30140-000",
@@ -106,7 +101,6 @@ export default function LukeClientesPage() {
   });
 
   const [loadingFirestore, setLoadingFirestore] = useState(false);
-  const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRoute, setSelectedRoute] = useState("Todas");
   const [selectedCondition, setSelectedCondition] = useState("Todas");
@@ -118,10 +112,8 @@ export default function LukeClientesPage() {
 
   const [formData, setFormData] = useState<Partial<ClientItem>>({
     routeId: "R1",
-    order: 1,
     code: "",
     name: "",
-    imageUrl: "",
     buyers: [{ name: "", phone: "", role: "Proprietário" }],
     conferenceInfo: "prazo 30 dias",
     acceptsPA: true,
@@ -159,7 +151,6 @@ export default function LukeClientesPage() {
             order: Number(d.order || 0),
             code: d.code || "",
             name: d.name || "Cliente",
-            imageUrl: d.imageUrl || (d.name?.toLowerCase().includes("luke") ? "/images/luke-logo.png" : undefined),
             buyers: d.buyers && Array.isArray(d.buyers) && d.buyers.length > 0
               ? d.buyers
               : [{ name: d.buyer || "Proprietário", phone: d.phone || "" }],
@@ -183,7 +174,6 @@ export default function LukeClientesPage() {
             notes: d.notes || "",
           });
         });
-        loaded.sort((a, b) => (a.order || 0) - (b.order || 0));
         setClients(loaded);
       }
     } catch (err: any) {
@@ -196,27 +186,6 @@ export default function LukeClientesPage() {
   useEffect(() => {
     fetchClientsFromFirestore();
   }, []);
-
-  // Sincroniza em lote com Firestore
-  const handleSyncFirestore = async () => {
-    setLoadingFirestore(true);
-    setSyncMessage(null);
-    try {
-      const batch = writeBatch(db);
-      const toSync = clients.slice(0, 100);
-      for (const cli of toSync) {
-        const cliRef = doc(db, `tenants/${tenantId}/clients`, cli.id);
-        batch.set(cliRef, { ...cli, updatedAt: new Date() }, { merge: true });
-      }
-      await batch.commit();
-      setSyncMessage(`✅ Base de ${toSync.length} clientes sincronizada com o Firestore com sucesso!`);
-      setTimeout(() => setSyncMessage(null), 4000);
-    } catch (err: any) {
-      setSyncMessage(`❌ Erro ao sincronizar: ${err?.message}`);
-    } finally {
-      setLoadingFirestore(false);
-    }
-  };
 
   // Filtragem
   const filtered = useMemo(() => {
@@ -248,22 +217,6 @@ export default function LukeClientesPage() {
     });
   }, [clients, searchTerm, selectedRoute, selectedCondition, statusFilter]);
 
-  // Upload Handler (JPG/PNG para Base64)
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (!file.type.includes("image/jpeg") && !file.type.includes("image/png") && !file.type.includes("image/webp")) {
-        alert("Por favor, selecione uma imagem no formato JPG ou PNG.");
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData((prev) => ({ ...prev, imageUrl: reader.result as string }));
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   // Modal Handlers
   const handleOpenModal = (cli?: ClientItem) => {
     if (cli) {
@@ -279,10 +232,8 @@ export default function LukeClientesPage() {
       setFormData({
         id: nextId,
         routeId: selectedRoute !== "Todas" ? selectedRoute : "R1",
-        order: nextOrder,
         code: `R1C${nextOrder}`,
         name: "",
-        imageUrl: "",
         buyers: [{ name: "", phone: "", role: "Proprietário" }],
         conferenceInfo: "prazo 30 dias",
         acceptsPA: true,
@@ -341,10 +292,9 @@ export default function LukeClientesPage() {
     const clientPayload: ClientItem = {
       id: formData.id || `CLI-${Date.now()}`,
       routeId: formData.routeId || "R1",
-      order: Number(formData.order || clients.length + 1),
+      order: editingClient?.order || clients.length + 1,
       code: formData.code || `C${clients.length + 1}`,
       name: formData.name.trim(),
-      imageUrl: formData.imageUrl || (formData.name?.toLowerCase().includes("luke") ? "/images/luke-logo.png" : undefined),
       buyers: validBuyers.length > 0 ? validBuyers : [{ name: primaryBuyer, phone: primaryPhone }],
       buyer: primaryBuyer,
       conferenceInfo: formData.conferenceInfo || "Prazo",
@@ -426,7 +376,7 @@ export default function LukeClientesPage() {
             </span>
           </div>
           <p className="text-brand-offwhite/60 text-sm mt-1">
-            Gestão completa de clientes, compradores com WhatsApp, fotos e limites de compras mensais.
+            Gestão completa de clientes, compradores com WhatsApp, condições comerciais e limites de compras mensais.
           </p>
         </div>
 
@@ -446,16 +396,6 @@ export default function LukeClientesPage() {
           </button>
 
           <button
-            onClick={handleSyncFirestore}
-            disabled={loadingFirestore}
-            className="flex items-center space-x-1.5 bg-brand-blue/40 border border-brand-gold/40 text-brand-offwhite hover:bg-brand-blue/60 px-3.5 py-2.5 rounded-xl font-semibold transition text-xs shadow-md"
-            title="Sincronizar base com o Firestore"
-          >
-            <RefreshCw size={14} className={loadingFirestore ? "animate-spin text-brand-gold" : "text-brand-gold"} />
-            <span>Sincronizar</span>
-          </button>
-
-          <button
             onClick={() => handleOpenModal()}
             className="flex items-center space-x-1.5 bg-brand-gold text-brand-black px-4 py-2.5 rounded-xl font-extrabold hover:bg-yellow-500 transition shadow-lg text-xs shrink-0"
           >
@@ -464,14 +404,6 @@ export default function LukeClientesPage() {
           </button>
         </div>
       </div>
-
-      {/* Sync Alert */}
-      {syncMessage && (
-        <div className="p-4 rounded-xl bg-brand-graphite border border-brand-gold/50 text-sm text-brand-offwhite flex items-center space-x-3 shadow-lg">
-          <CheckCircle2 className="text-brand-gold shrink-0" size={20} />
-          <span>{syncMessage}</span>
-        </div>
-      )}
 
       {/* Cards de Métricas */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -583,7 +515,6 @@ export default function LukeClientesPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-brand-blue/10 border-b border-brand-blue/30 text-brand-offwhite/70 text-xs uppercase tracking-wider">
-                <th className="p-4 font-medium w-16">Ordem</th>
                 <th className="p-4 font-medium">Cliente / Razão Social</th>
                 <th className="p-4 font-medium">Compradores & WhatsApp (Até 5)</th>
                 <th className="p-4 font-medium">Rota</th>
@@ -597,23 +528,11 @@ export default function LukeClientesPage() {
             <tbody className="divide-y divide-brand-blue/10 text-sm">
               {filtered.slice(0, 50).map((client) => (
                 <tr key={client.id} className="hover:bg-brand-blue/5 transition group">
-                  <td className="p-4 text-brand-offwhite/50 font-mono text-xs">
-                    #{client.order}
-                  </td>
-
                   <td className="p-4 font-semibold text-brand-offwhite">
                     <div className="flex items-center space-x-3">
-                      {client.imageUrl ? (
-                        <img
-                          src={client.imageUrl}
-                          alt={client.name}
-                          className="w-10 h-10 rounded-lg object-cover bg-brand-blue/20 border border-brand-gold/40 shrink-0"
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-lg bg-brand-blue/30 border border-brand-blue/40 flex items-center justify-center text-brand-gold shrink-0 font-bold text-xs">
-                          <Store size={18} />
-                        </div>
-                      )}
+                      <div className="w-10 h-10 rounded-xl bg-brand-blue/30 border border-brand-gold/30 flex items-center justify-center text-brand-gold shrink-0 font-extrabold text-xs shadow-xs">
+                        {client.name.slice(0, 2).toUpperCase()}
+                      </div>
                       <div>
                         <p className="text-brand-offwhite font-bold">{client.name}</p>
                         <p className="text-xs text-brand-offwhite/40 font-mono">{client.code || client.id}</p>
@@ -745,57 +664,12 @@ export default function LukeClientesPage() {
                   {editingClient ? "Editar Cliente" : "Novo Cliente"}
                 </h3>
                 <p className="text-xs text-brand-offwhite/60">
-                  Cadastre foto, até 5 compradores com WhatsApp, limite de compras mensal e endereço estruturado.
+                  Cadastre compradores com WhatsApp, condição comercial, limite de compras mensal e endereço estruturado.
                 </p>
               </div>
             </div>
 
             <form onSubmit={handleSaveClient} className="space-y-5">
-              {/* UPLOAD DE FOTO DO CLIENTE */}
-              <div className="p-4 bg-brand-black/50 rounded-xl border border-brand-blue/30 flex items-center gap-4">
-                <div className="relative w-20 h-20 rounded-xl bg-brand-blue/20 border border-brand-blue/40 flex items-center justify-center overflow-hidden shrink-0">
-                  {formData.imageUrl ? (
-                    <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-cover" />
-                  ) : (
-                    <ImageIcon className="text-brand-offwhite/30" size={32} />
-                  )}
-                </div>
-                <div className="flex-1 space-y-2">
-                  <label className="block text-xs font-bold text-brand-offwhite">
-                    Foto / Logomarca do Cliente (JPG ou PNG)
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      onChange={handleImageUpload}
-                      accept="image/png, image/jpeg, image/webp"
-                      className="hidden"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="flex items-center space-x-1.5 px-3 py-1.5 bg-brand-blue/40 border border-brand-gold/30 hover:bg-brand-blue/60 text-brand-offwhite text-xs font-bold rounded-lg transition"
-                    >
-                      <Upload size={14} className="text-brand-gold" />
-                      <span>Fazer Upload da Imagem</span>
-                    </button>
-                    {formData.imageUrl && (
-                      <button
-                        type="button"
-                        onClick={() => setFormData({ ...formData, imageUrl: "" })}
-                        className="text-xs text-red-400 hover:underline"
-                      >
-                        Remover
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-brand-offwhite/40">
-                    Dica: Para o cliente LUKE, a imagem padrão é atribuída automaticamente.
-                  </p>
-                </div>
-              </div>
-
               {/* Nome e CNPJ/CPF */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -808,7 +682,7 @@ export default function LukeClientesPage() {
                     value={formData.name || ""}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold"
-                    placeholder="Ex: Barbearia Vip Style ou LUKE Cosméticos"
+                    placeholder="Ex: Barbearia Vip Style ou Salão Realce"
                   />
                 </div>
 
@@ -887,11 +761,11 @@ export default function LukeClientesPage() {
                 </div>
               </div>
 
-              {/* Rota, Ordem e Código */}
-              <div className="grid grid-cols-3 gap-4">
+              {/* Rota e Código */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                    Rota
+                    Rota Atribuída
                   </label>
                   <select
                     value={formData.routeId || "R1"}
@@ -908,26 +782,14 @@ export default function LukeClientesPage() {
 
                 <div>
                   <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                    Ordem de Visita
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.order || 1}
-                    onChange={(e) => setFormData({ ...formData, order: Number(e.target.value) })}
-                    className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                    Código
+                    Código do Cliente (Opcional)
                   </label>
                   <input
                     type="text"
                     value={formData.code || ""}
                     onChange={(e) => setFormData({ ...formData, code: e.target.value })}
                     className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite font-mono focus:outline-none focus:border-brand-gold"
-                    placeholder="R1C10"
+                    placeholder="Ex: R1C10 ou CLI-10"
                   />
                 </div>
               </div>

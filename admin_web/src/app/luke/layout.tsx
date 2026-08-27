@@ -21,15 +21,35 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { PrivacyProvider, usePrivacy } from "@/lib/privacyContext";
 
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+
 function LukeSidebarContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [user, setUser] = useState<any>(null);
+  const [companyLogo, setCompanyLogo] = useState<string | null>("/images/luke-logo.png");
+  const [companyName, setCompanyName] = useState<string>("LUKE Brasil");
   const { hideValues, togglePrivacy } = usePrivacy();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
     });
+
+    const loadCompanyBranding = async () => {
+      try {
+        const snap = await getDoc(doc(db, "tenants/tenant_luke_001/settings", "company"));
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data.logoUrl) setCompanyLogo(data.logoUrl);
+          if (data.tradeName || data.name) setCompanyName(data.tradeName || data.name);
+        }
+      } catch (e) {
+        console.warn("Logo fallback:", e);
+      }
+    };
+    loadCompanyBranding();
+
     return () => unsubscribe();
   }, []);
 
@@ -53,20 +73,35 @@ function LukeSidebarContent({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-brand-black flex flex-col md:flex-row">
-      {/* Sidebar Corporativa LUKE */}
+      {/* Sidebar Corporativa */}
       <aside className="w-full md:w-64 bg-brand-graphite border-r border-brand-blue/30 flex flex-col justify-between shrink-0">
         <div>
-          {/* Header LUKE */}
-          <div className="p-6 border-b border-brand-blue/30 flex items-center justify-between">
-            <div>
-              <div className="flex items-center space-x-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-brand-gold" />
-                <h1 className="text-xl font-black text-brand-gold tracking-wider uppercase">
-                  LUKE Brasil
-                </h1>
-              </div>
-              <p className="text-[11px] text-brand-offwhite/50 mt-0.5">Gestão de Distribuição</p>
-            </div>
+          {/* Header com Logomarca Dinâmica */}
+          <div className="p-5 border-b border-brand-blue/30 flex items-center justify-between">
+            <Link href="/luke" className="block group">
+              {companyLogo ? (
+                <div className="flex items-center space-x-3">
+                  <div className="h-10 max-w-[170px] flex items-center justify-start overflow-hidden">
+                    <img
+                      src={companyLogo}
+                      alt={companyName}
+                      className="max-h-10 w-auto object-contain transition-transform group-hover:scale-105"
+                      onError={() => setCompanyLogo(null)}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-brand-gold" />
+                    <h1 className="text-lg font-black text-brand-gold tracking-wider uppercase truncate max-w-[170px]">
+                      {companyName}
+                    </h1>
+                  </div>
+                  <p className="text-[10px] text-brand-offwhite/50 mt-0.5">Gestão de Distribuição</p>
+                </div>
+              )}
+            </Link>
           </div>
 
           {/* Navegação de Palavra Única */}

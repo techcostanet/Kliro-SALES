@@ -605,7 +605,7 @@ export default function LukeRotasPage() {
           <div className="flex items-center space-x-3">
             <h2 className="text-3xl font-black text-brand-offwhite tracking-tight flex items-center gap-2.5">
               <CalendarIcon className="text-brand-gold" size={28} />
-              <span>Agenda & Gestão de Rotas</span>
+              <span>Gestão de Rotas</span>
             </h2>
             <span className="bg-brand-gold/20 text-brand-gold text-xs px-2.5 py-1 rounded-full font-bold border border-brand-gold/30">
               LUKE Brasil
@@ -676,24 +676,13 @@ export default function LukeRotasPage() {
             <span>Montar Mês</span>
           </button>
 
-          {/* Sincronizar Firestore */}
-          <button
-            onClick={handleSyncFirestore}
-            disabled={loadingFirestore}
-            className="flex items-center space-x-1.5 bg-brand-graphite border border-brand-blue/40 text-brand-offwhite hover:bg-brand-blue/30 px-3.5 py-2 rounded-xl font-semibold transition text-xs shadow-md"
-            title="Sincronizar com Firestore"
-          >
-            <RefreshCw size={14} className={loadingFirestore ? "animate-spin text-brand-gold" : "text-brand-gold"} />
-            <span className="hidden sm:inline">Sincronizar</span>
-          </button>
-
-          {/* Novo Agendamento */}
+          {/* Nova Rota */}
           <button
             onClick={() => handleOpenNewEventModal()}
             className="flex items-center space-x-1.5 bg-brand-gold text-brand-black px-4 py-2 rounded-xl font-extrabold hover:bg-yellow-500 transition shadow-lg text-xs shrink-0"
           >
             <Plus size={16} />
-            <span>Agendar Rota</span>
+            <span>Nova Rota</span>
           </button>
         </div>
       </div>
@@ -1334,7 +1323,7 @@ export default function LukeRotasPage() {
               </div>
               <div>
                 <h3 className="text-xl font-bold text-brand-offwhite">
-                  {editingEvent ? "Editar Rota Agendada" : "Agendar Nova Rota"}
+                  {editingEvent ? "Editar Rota" : "Nova Rota"}
                 </h3>
                 <p className="text-xs text-brand-offwhite/60">
                   Selecione a data, rota mestre e o vendedor responsável.
@@ -1425,7 +1414,7 @@ export default function LukeRotasPage() {
 
               {/* Preview Visual */}
               <div className="p-3 bg-brand-black/60 rounded-xl border border-brand-blue/30 flex items-center justify-between">
-                <span className="text-xs text-brand-offwhite/60">Identidade Visual na Agenda:</span>
+                <span className="text-xs text-brand-offwhite/60">Identidade Visual da Rota:</span>
                 <div className="flex items-center space-x-2">
                   <span
                     style={{ backgroundColor: formData.vendorColor || "#10b981" }}
@@ -1453,7 +1442,7 @@ export default function LukeRotasPage() {
                     onChange={(e: any) => setFormData({ ...formData, status: e.target.value })}
                     className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold"
                   >
-                    <option value="SCHEDULED">Agendada</option>
+                    <option value="SCHEDULED">Planejada</option>
                     <option value="IN_PROGRESS">Em Andamento</option>
                     <option value="COMPLETED">Concluída</option>
                     <option value="CANCELLED">Cancelada</option>
@@ -1495,7 +1484,7 @@ export default function LukeRotasPage() {
                     onClick={() => handleDeleteEvent(editingEvent.id)}
                     className="px-3 py-2 text-xs font-bold text-rose-400 hover:bg-rose-500/10 rounded-lg transition"
                   >
-                    Excluir Agendamento
+                    Excluir Rota
                   </button>
                 ) : <div />}
 
@@ -1511,7 +1500,7 @@ export default function LukeRotasPage() {
                     type="submit"
                     className="px-6 py-2 bg-brand-gold text-brand-black rounded-lg font-extrabold hover:bg-yellow-500 transition shadow-lg text-sm"
                   >
-                    Salvar na Agenda
+                    Salvar Rota
                   </button>
                 </div>
               </div>
