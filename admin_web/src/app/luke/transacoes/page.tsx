@@ -1,71 +1,172 @@
 "use client";
 
-import { useState } from "react";
-import { DollarSign, Search, ArrowDownLeft, ArrowUpRight, QrCode, Banknote, FileText, Eye, EyeOff } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { DollarSign, Search, ArrowDownLeft, ArrowUpRight, QrCode, Banknote, FileText, Eye, EyeOff, RotateCcw } from "lucide-react";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { usePrivacy } from "@/lib/privacyContext";
 import VendorBadge from "@/components/VendorBadge";
+
+export interface TransactionItem {
+  id: string;
+  clientName: string;
+  vendorName: string;
+  paymentMethod: "PIX" | "CASH" | "TICKET" | "DEVOLUÇÃO" | string;
+  amount: number;
+  date: string;
+  status: "CONCILIADO" | "A_RECEBER" | "PROCESSADO" | string;
+}
+
+const INITIAL_TRANSACTIONS: TransactionItem[] = [
+  {
+    id: "tx-test-001",
+    clientName: "Barbearia Dom Lucas Barber Club & Spa (TESTE VIP)",
+    vendorName: "Alisson",
+    paymentMethod: "PIX",
+    amount: 1850.0,
+    date: "26/08, 14:30",
+    status: "CONCILIADO",
+  },
+  {
+    id: "tx-test-002",
+    clientName: "Barbearia Dom Lucas Barber Club & Spa (TESTE VIP)",
+    vendorName: "Alisson",
+    paymentMethod: "TICKET",
+    amount: 2450.0,
+    date: "20/08, 11:15",
+    status: "A_RECEBER",
+  },
+  {
+    id: "tx-test-003",
+    clientName: "Studio Beleza Real & Barbearia Vip (TESTE SHOWROOM)",
+    vendorName: "Alexandre",
+    paymentMethod: "CASH",
+    amount: 1200.0,
+    date: "24/08, 16:15",
+    status: "CONCILIADO",
+  },
+  {
+    id: "tx-test-004",
+    clientName: "Studio Beleza Real & Barbearia Vip (TESTE SHOWROOM)",
+    vendorName: "Alexandre",
+    paymentMethod: "DEVOLUÇÃO",
+    amount: -140.0,
+    date: "24/08, 16:30",
+    status: "PROCESSADO",
+  },
+  {
+    id: "tx-test-005",
+    clientName: "Studio Beleza Real & Barbearia Vip (TESTE SHOWROOM)",
+    vendorName: "Alexandre",
+    paymentMethod: "TICKET",
+    amount: 1680.0,
+    date: "14/08, 10:45",
+    status: "A_RECEBER",
+  },
+  {
+    id: "tx-001",
+    clientName: "Barbearia Vip Style",
+    vendorName: "Alisson",
+    paymentMethod: "PIX",
+    amount: 450.0,
+    date: "Hoje, 14:32",
+    status: "CONCILIADO",
+  },
+  {
+    id: "tx-002",
+    clientName: "Studio Hair & Barba",
+    vendorName: "Alisson",
+    paymentMethod: "CASH",
+    amount: 1280.5,
+    date: "Hoje, 13:15",
+    status: "CONCILIADO",
+  },
+  {
+    id: "tx-003",
+    clientName: "Barber Shop Elite",
+    vendorName: "Alexandre",
+    paymentMethod: "PIX",
+    amount: 890.0,
+    date: "Hoje, 11:40",
+    status: "CONCILIADO",
+  },
+  {
+    id: "tx-004",
+    clientName: "Salão Requinte & Arte",
+    vendorName: "Alexandre",
+    paymentMethod: "DEVOLUÇÃO",
+    amount: -120.0,
+    date: "Hoje, 10:22",
+    status: "PROCESSADO",
+  },
+  {
+    id: "tx-005",
+    clientName: "Barbearia Dom Pedro",
+    vendorName: "Lucas",
+    paymentMethod: "TICKET",
+    amount: 620.0,
+    date: "Hoje, 09:10",
+    status: "A_RECEBER",
+  },
+];
 
 export default function LukeTransacoesPage() {
   const { hideValues, togglePrivacy, formatValue } = usePrivacy();
 
-  const [transactions, setTransactions] = useState([
-    {
-      id: "tx-001",
-      clientName: "Barbearia Vip Style",
-      vendorName: "Alisson",
-      paymentMethod: "PIX",
-      amount: 450.0,
-      date: "Hoje, 14:32",
-      status: "CONCILIADO",
-    },
-    {
-      id: "tx-002",
-      clientName: "Studio Hair & Barba",
-      vendorName: "Alisson",
-      paymentMethod: "CASH",
-      amount: 1280.5,
-      date: "Hoje, 13:15",
-      status: "CONCILIADO",
-    },
-    {
-      id: "tx-003",
-      clientName: "Barber Shop Elite",
-      vendorName: "Alexandre",
-      paymentMethod: "PIX",
-      amount: 890.0,
-      date: "Hoje, 11:40",
-      status: "CONCILIADO",
-    },
-    {
-      id: "tx-004",
-      clientName: "Salão Requinte & Arte",
-      vendorName: "Alexandre",
-      paymentMethod: "DEVOLUÇÃO",
-      amount: -120.0,
-      date: "Hoje, 10:22",
-      status: "PROCESSADO",
-    },
-    {
-      id: "tx-005",
-      clientName: "Barbearia Dom Pedro",
-      vendorName: "Lucas",
-      paymentMethod: "TICKET",
-      amount: 620.0,
-      date: "Hoje, 09:10",
-      status: "A_RECEBER",
-    },
-  ]);
-
+  const [transactions, setTransactions] = useState<TransactionItem[]>(INITIAL_TRANSACTIONS);
   const [filterType, setFilterType] = useState("ALL");
   const [searchTerm, setSearchTerm] = useState("");
+  const [loadingFirestore, setLoadingFirestore] = useState(false);
 
-  const filtered = transactions.filter((t) => {
-    const matchesType = filterType === "ALL" || t.paymentMethod === filterType;
-    const matchesSearch =
-      t.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.vendorName.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesType && matchesSearch;
-  });
+  const tenantId = "tenant_luke_001";
+
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      try {
+        setLoadingFirestore(true);
+        const snap = await getDocs(collection(db, `tenants/${tenantId}/transactions`));
+        if (!snap.empty) {
+          const loaded: TransactionItem[] = [];
+          snap.forEach((docSnap) => {
+            const d = docSnap.data();
+            loaded.push({
+              id: docSnap.id,
+              clientName: d.clientName || d.clientId || "Salão / Cliente",
+              vendorName: d.vendorName || "Alisson",
+              paymentMethod: d.paymentMethod || "PIX",
+              amount: Number(d.amount || 0),
+              date: d.timestamp ? new Date(d.timestamp?.toDate ? d.timestamp.toDate() : d.timestamp).toLocaleDateString("pt-BR") : "Recente",
+              status: d.status || "CONCILIADO",
+            });
+          });
+          const testItems = INITIAL_TRANSACTIONS.filter((t) => t.id.startsWith("tx-test-"));
+          setTransactions([...testItems, ...loaded]);
+        }
+      } catch (err: any) {
+        console.warn("Firestore transactions fallback:", err?.message);
+      } finally {
+        setLoadingFirestore(false);
+      }
+    };
+
+    fetchTransactions();
+  }, []);
+
+  const filtered = useMemo(() => {
+    return transactions.filter((t) => {
+      const matchesType = filterType === "ALL" || t.paymentMethod === filterType;
+      const matchesSearch =
+        t.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        t.vendorName.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesType && matchesSearch;
+    });
+  }, [transactions, filterType, searchTerm]);
+
+  // Cálculos dinâmicos para os KPIs superiores
+  const totalAmount = useMemo(() => transactions.reduce((acc, t) => acc + t.amount, 0), [transactions]);
+  const pixTotal = useMemo(() => transactions.filter((t) => t.paymentMethod === "PIX").reduce((acc, t) => acc + t.amount, 0), [transactions]);
+  const cashTotal = useMemo(() => transactions.filter((t) => t.paymentMethod === "CASH").reduce((acc, t) => acc + t.amount, 0), [transactions]);
+  const ticketTotal = useMemo(() => transactions.filter((t) => t.paymentMethod === "TICKET").reduce((acc, t) => acc + t.amount, 0), [transactions]);
 
   return (
     <div className="space-y-8">
@@ -93,30 +194,30 @@ export default function LukeTransacoesPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md">
-          <p className="text-xs font-semibold uppercase text-brand-offwhite/60">Total Hoje</p>
+          <p className="text-xs font-semibold uppercase text-brand-offwhite/60">Total Movimentado</p>
           <h3 className="text-2xl font-black text-brand-offwhite mt-1">
-            {formatValue(3120.5)}
+            {formatValue(totalAmount)}
           </h3>
         </div>
 
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md">
           <p className="text-xs font-semibold uppercase text-brand-offwhite/60">Pix</p>
           <h3 className="text-2xl font-black text-teal-400 mt-1">
-            {formatValue(1340.0)}
+            {formatValue(pixTotal)}
           </h3>
         </div>
 
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md">
           <p className="text-xs font-semibold uppercase text-brand-offwhite/60">Dinheiro</p>
           <h3 className="text-2xl font-black text-brand-gold mt-1">
-            {formatValue(1280.5)}
+            {formatValue(cashTotal)}
           </h3>
         </div>
 
         <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md">
           <p className="text-xs font-semibold uppercase text-brand-offwhite/60">Prazo</p>
           <h3 className="text-2xl font-black text-purple-400 mt-1">
-            {formatValue(620.0)}
+            {formatValue(ticketTotal)}
           </h3>
         </div>
       </div>

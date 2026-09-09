@@ -174,6 +174,27 @@ export default function LukeClientesPage() {
             notes: d.notes || "",
           });
         });
+        const testItems = (initialClients as any[])
+          .filter((c) => c.id.startsWith("CLI-TEST-"))
+          .map((c) => ({
+            ...c,
+            acceptsPA: c.acceptsPA ?? true,
+            buyers: c.buyers || [],
+          }));
+
+        for (const tItem of testItems) {
+          if (!loaded.some((l) => l.id === tItem.id)) {
+            loaded.unshift(tItem);
+            try {
+              setDoc(doc(db, `tenants/${tenantId}/clients`, tItem.id), {
+                ...tItem,
+                createdAt: new Date(),
+              });
+            } catch (e) {
+              // ignore
+            }
+          }
+        }
         setClients(loaded);
       }
     } catch (err: any) {

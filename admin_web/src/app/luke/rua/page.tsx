@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   MapPin,
   CheckCircle2,
@@ -14,10 +14,12 @@ import {
   Banknote,
   DollarSign,
   Search,
+  Filter,
 } from "lucide-react";
 import Link from "next/link";
 
 import initialProducts from "@/lib/products_catalog.json";
+import initialClients from "@/lib/clients_catalog.json";
 import { getVendorColor } from "@/lib/vendorColors";
 import { MASTER_ROUTES_CATALOG } from "@/lib/routesCatalog";
 import VendorBadge from "@/components/VendorBadge";
@@ -29,6 +31,8 @@ interface Product {
   barcode: string;
   category?: string;
   unit?: string;
+  imageUrl?: string;
+  brand?: string;
 }
 
 interface Client {
@@ -47,71 +51,88 @@ export default function LukeModoRuaPage() {
   const [routeStatus, setRouteStatus] = useState<"OPEN" | "CLOSED">("OPEN");
   const [closedHash, setClosedHash] = useState<string | null>(null);
   const [productSearch, setProductSearch] = useState("");
-  const [productFilterCat, setProductFilterCat] = useState("Todas");
 
   const [selectedVendor, setSelectedVendor] = useState("Alisson");
-  const [selectedRouteCode, setSelectedRouteCode] = useState("F10");
-  const [isRouteSelectorOpen, setIsRouteSelectorOpen] = useState(false);
+  const [selectedRouteCode, setSelectedRouteCode] = useState("R1");
 
   const vendorColor = getVendorColor(selectedVendor);
   const currentRoute = MASTER_ROUTES_CATALOG.find((r) => r.code === selectedRouteCode) || {
     code: selectedRouteCode,
-    name: `Rota ${selectedRouteCode} - Lagoa Santa & Vetor Norte`,
+    name: `Rota ${selectedRouteCode} - Centro & Região`,
   };
 
-  const productsCatalog: Product[] = initialProducts;
+  const productsCatalog: Product[] = initialProducts as Product[];
 
-  const [clients, setClients] = useState<Client[]>([
-    {
-      id: "c1",
-      order: 1,
-      name: "Padaria & Confeitaria Estrela",
-      document: "12.345.678/0001-90",
-      address: "Rua das Flores, 142 - Centro",
-      status: "COMPLETED",
-      lastSaleAmount: 450.0,
-    },
-    {
-      id: "c2",
-      order: 2,
-      name: "Supermercado Boa Vista",
-      document: "98.765.432/0001-11",
-      address: "Av. Brasil, 1200 - Centro",
-      status: "COMPLETED",
-      lastSaleAmount: 1280.5,
-    },
-    {
-      id: "c3",
-      order: 3,
-      name: "Mercearia Central",
-      document: "45.123.789/0001-33",
-      address: "Rua XV de Novembro, 88 - Centro",
-      status: "PENDING",
-    },
-    {
-      id: "c4",
-      order: 4,
-      name: "Panificadora Pão Dourado",
-      document: "67.890.123/0001-44",
-      address: "Rua São Paulo, 305 - Zona Sul",
-      status: "PENDING",
-    },
-    {
-      id: "c5",
-      order: 5,
-      name: "Armazém & Conveniência Sul",
-      document: "33.222.111/0001-55",
-      address: "Av. das Palmeiras, 450 - Zona Sul",
-      status: "PENDING",
-    },
-  ]);
+  // Monta lista de clientes da rota atual, priorizando os salões de teste
+  const initialRouteClients = useMemo<Client[]>(() => {
+    const routeMatching = (initialClients as any[])
+      .filter((c) => c.routeId === selectedRouteCode)
+      .slice(0, 10)
+      .map((c, idx) => ({
+        id: c.id,
+        order: idx + 1,
+        name: c.name,
+        document: c.document || "00.000.000/0001-00",
+        address: c.address || `${c.street || "Rua Principal"}, ${c.number || "100"} - ${c.neighborhood || "Centro"}`,
+        status: idx === 0 ? ("PENDING" as const) : ("PENDING" as const),
+        lastSaleAmount: 0,
+      }));
+
+    if (routeMatching.length > 0) {
+      return routeMatching;
+    }
+
+    // Fallback garantido para demonstração
+    return [
+      {
+        id: "CLI-TEST-001",
+        order: 1,
+        name: "Barbearia Dom Lucas Barber Club & Spa (TESTE VIP)",
+        document: "34.128.992/0001-45",
+        address: "Avenida Afonso Pena, 2850 - Savassi, Belo Horizonte - MG",
+        status: "PENDING",
+        lastSaleAmount: 0,
+      },
+      {
+        id: "CLI-TEST-002",
+        order: 2,
+        name: "Studio Beleza Real & Barbearia Vip (TESTE SHOWROOM)",
+        document: "28.945.112/0001-88",
+        address: "Avenida Fleming, 840 - Pampulha, Belo Horizonte - MG",
+        status: "PENDING",
+        lastSaleAmount: 0,
+      },
+    ];
+  }, [selectedRouteCode]);
+
+  const [clients, setClients] = useState<Client[]>(initialRouteClients);
+
+  // Sincroniza quando muda a rota
+  const handleRouteChange = (routeCode: string) => {
+    setSelectedRouteCode(routeCode);
+    const newRoute = MASTER_ROUTES_CATALOG.find((r) => r.code === routeCode);
+    if (newRoute?.defaultVendorName) {
+      setSelectedVendor(newRoute.defaultVendorName);
+    }
+    const matching = (initialClients as any[])
+      .filter((c) => c.routeId === routeCode)
+      .slice(0, 10)
+      .map((c, idx) => ({
+        id: c.id,
+        order: idx + 1,
+        name: c.name,
+        document: c.document || "00.000.000/0001-00",
+        address: c.address || `${c.street || "Rua Principal"}, ${c.number || "100"} - ${c.neighborhood || "Centro"}`,
+        status: "PENDING" as const,
+        lastSaleAmount: 0,
+      }));
+    setClients(matching.length > 0 ? matching : initialRouteClients);
+  };
 
   const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [cart, setCart] = useState<{ [productId: string]: number }>({
-    p1: 0,
-    p2: 0,
-    p3: 0,
-    p4: 0,
+    "PROD-001": 2,
+    "PROD-002": 3,
   });
   const [paymentMethod, setPaymentMethod] = useState<"PIX" | "CASH" | "TICKET">("PIX");
   const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
@@ -136,7 +157,10 @@ export default function LukeModoRuaPage() {
   const handleOpenClientSale = (client: Client) => {
     if (routeStatus === "CLOSED") return;
     setActiveClient(client);
-    setCart({ p1: 1, p2: 2, p3: 0, p4: 0 });
+    setCart({
+      "PROD-001": 2,
+      "PROD-002": 3,
+    });
   };
 
   const handleFinalizeSale = () => {
@@ -218,6 +242,23 @@ export default function LukeModoRuaPage() {
 
       {/* Conteúdo Mobile */}
       <main className="max-w-xl mx-auto px-4 pt-4 space-y-4">
+        {/* Seletor de Rota */}
+        <div className="flex items-center space-x-2 bg-brand-graphite p-2.5 rounded-xl border border-brand-blue/30 text-xs">
+          <span className="text-brand-offwhite/60 font-semibold">Selecionar Rota:</span>
+          <select
+            value={selectedRouteCode}
+            onChange={(e) => handleRouteChange(e.target.value)}
+            className="bg-brand-black text-brand-gold font-bold px-3 py-1.5 rounded-lg border border-brand-blue/40 focus:outline-none"
+          >
+            <option value="R1">Rota R1 - Centro (Barbearia Dom Lucas VIP)</option>
+            <option value="F2">Rota F2 - Pampulha (Studio Beleza Real Showroom)</option>
+            <option value="R2">Rota R2 - Zona Sul</option>
+            <option value="R3">Rota R3 - Barreiro & Contorno</option>
+            <option value="F1">Rota F1 - Leste & Savassi</option>
+            <option value="F10">Rota F10 - Lagoa Santa</option>
+          </select>
+        </div>
+
         {/* Card Resumo da Rota do Dia */}
         <div className="bg-gradient-to-br from-brand-graphite to-brand-blue/20 rounded-2xl p-5 border border-brand-blue/30 shadow-lg relative overflow-hidden">
           <div style={{ backgroundColor: vendorColor }} className="absolute top-0 left-0 right-0 h-1.5" />
@@ -249,12 +290,12 @@ export default function LukeModoRuaPage() {
               <span>
                 Progresso: {completedCount} de {clients.length} clientes
               </span>
-              <span>{Math.round((completedCount / clients.length) * 100)}%</span>
+              <span>{clients.length > 0 ? Math.round((completedCount / clients.length) * 100) : 0}%</span>
             </div>
             <div className="w-full bg-brand-black rounded-full h-2.5 overflow-hidden border border-brand-blue/30">
               <div
                 className="bg-brand-gold h-full rounded-full transition-all duration-500"
-                style={{ width: `${(completedCount / clients.length) * 100}%` }}
+                style={{ width: `${clients.length > 0 ? (completedCount / clients.length) * 100 : 0}%` }}
               />
             </div>
           </div>
@@ -263,7 +304,7 @@ export default function LukeModoRuaPage() {
           {routeStatus === "OPEN" ? (
             <button
               onClick={() => setIsClosingModalOpen(true)}
-              className="mt-4 w-full bg-brand-gold text-brand-black py-2.5 rounded-xl font-bold hover:bg-yellow-500 transition shadow-lg flex items-center justify-center space-x-2 text-sm"
+              className="mt-4 w-full bg-brand-gold text-brand-black py-2.5 rounded-xl font-bold hover:bg-yellow-500 transition shadow-lg flex items-center justify-center space-x-2 text-sm cursor-pointer"
             >
               <Lock size={16} />
               <span>Finalizar e Fechar Rota (LUKE)</span>
@@ -358,7 +399,7 @@ export default function LukeModoRuaPage() {
               </div>
               <button
                 onClick={() => setActiveClient(null)}
-                className="text-brand-offwhite/50 hover:text-brand-offwhite text-sm p-1"
+                className="text-brand-offwhite/50 hover:text-brand-offwhite text-sm p-1 cursor-pointer"
               >
                 ✕ Fechar
               </button>
@@ -379,7 +420,7 @@ export default function LukeModoRuaPage() {
                   type="text"
                   value={productSearch}
                   onChange={(e) => setProductSearch(e.target.value)}
-                  placeholder="Filtrar entre os 46 produtos..."
+                  placeholder="Filtrar entre os produtos LUKE..."
                   className="w-full pl-8 pr-3 py-1.5 bg-brand-black border border-brand-blue/40 rounded-lg text-xs text-brand-offwhite placeholder-brand-offwhite/30 focus:outline-none focus:border-brand-gold"
                 />
               </div>
@@ -404,7 +445,7 @@ export default function LukeModoRuaPage() {
                         <div className="flex items-center space-x-2.5 pr-2">
                           <div className="w-9 h-9 rounded-lg bg-brand-black border border-brand-blue/30 overflow-hidden shrink-0">
                             <img
-                              src={(product as any).imageUrl || "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&auto=format&fit=crop&q=80"}
+                              src={product.imageUrl || "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&auto=format&fit=crop&q=80"}
                               alt={product.name}
                               className="w-full h-full object-cover"
                             />
@@ -412,7 +453,7 @@ export default function LukeModoRuaPage() {
                           <div>
                             <div className="flex items-center space-x-1.5">
                               <span className="text-[9px] px-1 py-0.2 rounded bg-brand-gold/15 text-brand-gold font-bold uppercase">
-                                {(product as any).brand || "LUKE"}
+                                {product.brand || "LUKE"}
                               </span>
                               <p className="text-xs font-semibold text-brand-offwhite">{product.name}</p>
                             </div>
@@ -426,7 +467,7 @@ export default function LukeModoRuaPage() {
                           <button
                             type="button"
                             onClick={() => handleUpdateQty(product.id, -1)}
-                            className="p-1 text-brand-offwhite/70 hover:text-brand-gold transition"
+                            className="p-1 text-brand-offwhite/70 hover:text-brand-gold transition cursor-pointer"
                           >
                             <Minus size={13} />
                           </button>
@@ -436,7 +477,7 @@ export default function LukeModoRuaPage() {
                           <button
                             type="button"
                             onClick={() => handleUpdateQty(product.id, 1)}
-                            className="p-1 text-brand-offwhite/70 hover:text-brand-gold transition"
+                            className="p-1 text-brand-offwhite/70 hover:text-brand-gold transition cursor-pointer"
                           >
                             <Plus size={13} />
                           </button>
@@ -456,7 +497,7 @@ export default function LukeModoRuaPage() {
                 <button
                   type="button"
                   onClick={() => setPaymentMethod("PIX")}
-                  className={`py-2.5 rounded-xl text-xs font-bold flex flex-col items-center justify-center space-y-1 border transition ${
+                  className={`py-2.5 rounded-xl text-xs font-bold flex flex-col items-center justify-center space-y-1 border transition cursor-pointer ${
                     paymentMethod === "PIX"
                       ? "bg-teal-500/20 text-teal-300 border-teal-400"
                       : "bg-brand-black/50 text-brand-offwhite/60 border-brand-blue/30"
@@ -469,7 +510,7 @@ export default function LukeModoRuaPage() {
                 <button
                   type="button"
                   onClick={() => setPaymentMethod("CASH")}
-                  className={`py-2.5 rounded-xl text-xs font-bold flex flex-col items-center justify-center space-y-1 border transition ${
+                  className={`py-2.5 rounded-xl text-xs font-bold flex flex-col items-center justify-center space-y-1 border transition cursor-pointer ${
                     paymentMethod === "CASH"
                       ? "bg-amber-500/20 text-amber-300 border-amber-400"
                       : "bg-brand-black/50 text-brand-offwhite/60 border-brand-blue/30"
@@ -482,14 +523,14 @@ export default function LukeModoRuaPage() {
                 <button
                   type="button"
                   onClick={() => setPaymentMethod("TICKET")}
-                  className={`py-2.5 rounded-xl text-xs font-bold flex flex-col items-center justify-center space-y-1 border transition ${
+                  className={`py-2.5 rounded-xl text-xs font-bold flex flex-col items-center justify-center space-y-1 border transition cursor-pointer ${
                     paymentMethod === "TICKET"
                       ? "bg-purple-500/20 text-purple-300 border-purple-400"
                       : "bg-brand-black/50 text-brand-offwhite/60 border-brand-blue/30"
                   }`}
                 >
                   <DollarSign size={18} />
-                  <span>A Prazo</span>
+                  <span>A Prazo (P.A.)</span>
                 </button>
               </div>
             </div>
@@ -506,7 +547,7 @@ export default function LukeModoRuaPage() {
               <button
                 onClick={handleFinalizeSale}
                 disabled={currentCartTotal === 0}
-                className="w-full bg-brand-gold text-brand-black py-3 rounded-xl font-extrabold hover:bg-yellow-500 disabled:opacity-40 transition shadow-lg text-sm"
+                className="w-full bg-brand-gold text-brand-black py-3 rounded-xl font-extrabold hover:bg-yellow-500 disabled:opacity-40 transition shadow-lg text-sm cursor-pointer"
               >
                 Concluir Venda e Registrar
               </button>
@@ -549,7 +590,7 @@ export default function LukeModoRuaPage() {
             <div className="space-y-2">
               <button
                 onClick={handleExecuteRouteClose}
-                className="w-full bg-brand-gold text-brand-black py-3 rounded-xl font-extrabold hover:bg-yellow-500 transition shadow-lg text-sm flex items-center justify-center space-x-2"
+                className="w-full bg-brand-gold text-brand-black py-3 rounded-xl font-extrabold hover:bg-yellow-500 transition shadow-lg text-sm flex items-center justify-center space-x-2 cursor-pointer"
               >
                 <ShieldCheck size={18} />
                 <span>Confirmar e Travar Rota</span>
@@ -557,7 +598,7 @@ export default function LukeModoRuaPage() {
 
               <button
                 onClick={() => setIsClosingModalOpen(false)}
-                className="w-full py-2.5 text-xs text-brand-offwhite/60 hover:text-brand-offwhite transition"
+                className="w-full py-2.5 text-xs text-brand-offwhite/60 hover:text-brand-offwhite transition cursor-pointer"
               >
                 Cancelar e Continuar Vendendo
               </button>

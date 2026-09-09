@@ -24,17 +24,36 @@ service cloud.firestore {
 
       // Subcoleção de Produtos (Catálogo)
       match /products/{productId} {
-        allow read: if isAuthenticated();
-        allow write: if isAuthenticated();
+        allow read, write: if isAuthenticated();
       }
 
-      // Subcoleção de Clientes
+      // Subcoleção de Clientes (Salões e Barbearias)
       match /clients/{clientId} {
         allow read, write: if isAuthenticated();
       }
 
       // Subcoleção de Rotas
       match /routes/{routeId} {
+        allow read, write: if isAuthenticated();
+      }
+
+      // Subcoleção de Agendamentos de Rotas (Calendário)
+      match /route_schedules/{scheduleId} {
+        allow read, write: if isAuthenticated();
+      }
+
+      // Subcoleção de Contas a Pagar (Payables)
+      match /payables/{payableId} {
+        allow read, write: if isAuthenticated();
+      }
+
+      // Subcoleção de Contas a Receber (Receivables / P.A.)
+      match /receivables/{receivableId} {
+        allow read, write: if isAuthenticated();
+      }
+
+      // Subcoleção de Configurações da Empresa (Branding e Dados)
+      match /settings/{settingId} {
         allow read, write: if isAuthenticated();
       }
 

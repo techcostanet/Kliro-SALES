@@ -75,6 +75,32 @@ export interface ReceivableItem {
 
 const INITIAL_PAYABLES: PayableItem[] = [
   {
+    id: "pay-test-001",
+    description: "Comissão Comercial Venda R1 - Barbearia Dom Lucas (TESTE VIP)",
+    categoryId: "CAT-005",
+    categoryName: "Salário & Comissões de Vendedores",
+    supplier: "Alisson (Vendedor)",
+    amount: 196.0,
+    dueDate: "2026-08-30",
+    paymentDate: "2026-08-27",
+    paymentMethod: "PIX",
+    competence: "08/2026",
+    status: "PAID",
+    notes: "Comissão 8% sobre venda de pomadas e sprays na Barbearia Dom Lucas",
+  },
+  {
+    id: "pay-test-002",
+    description: "Frete & Logística Expressa Rota F2 - Studio Beleza Real (TESTE SHOWROOM)",
+    categoryId: "CAT-009",
+    categoryName: "Combustível & Abastecimento",
+    supplier: "Transportadora BH Express",
+    amount: 85.0,
+    dueDate: "2026-08-29",
+    competence: "08/2026",
+    status: "PENDING",
+    notes: "Entrega suplementar de 2 galões de Shampoo Lavatório 5L",
+  },
+  {
     id: "pay-001",
     description: "Compra Matéria-Prima / Pomadas Fábrica",
     categoryId: "CAT-008",
@@ -154,6 +180,114 @@ const INITIAL_PAYABLES: PayableItem[] = [
 ];
 
 const INITIAL_RECEIVABLES: ReceivableItem[] = [
+  {
+    id: "pa-test-001",
+    clientName: "Barbearia Dom Lucas Barber Club & Spa (TESTE VIP)",
+    buyerName: "Lucas Silveira",
+    routeId: "R1",
+    vendorName: "Alisson",
+    amount: 1850.0,
+    saleDate: "2026-08-15",
+    scheduledDate: "2026-08-26",
+    receivedDate: "2026-08-26",
+    paymentMethod: "PIX",
+    status: "RECEIVED",
+    notes: "Recebido via Pix - 30un Pomada Teia + 20un Óleo Barba",
+    auditTrail: ["26/08/2026 14:30 - Baixa confirmada via PIX pelo Vendedor Alisson"],
+  },
+  {
+    id: "pa-test-002",
+    clientName: "Barbearia Dom Lucas Barber Club & Spa (TESTE VIP)",
+    buyerName: "Lucas Silveira",
+    routeId: "R1",
+    vendorName: "Alisson",
+    amount: 2450.0,
+    saleDate: "2026-08-20",
+    scheduledDate: "2026-08-28",
+    paymentMethod: "PA",
+    status: "PENDING",
+    notes: "P.A. 30 dias - Lote Promocional Cosméticos LUKE",
+  },
+  {
+    id: "pa-test-003",
+    clientName: "Barbearia Dom Lucas Barber Club & Spa (TESTE VIP)",
+    buyerName: "Renata Meireles",
+    routeId: "R1",
+    vendorName: "Alisson",
+    amount: 980.0,
+    saleDate: "2026-08-25",
+    scheduledDate: "2026-09-15",
+    paymentMethod: "PA",
+    status: "NEXT_MONTH",
+    notes: "P.A. faturado com vencimento para Setembro/2026",
+  },
+  {
+    id: "pa-test-004",
+    clientName: "Barbearia Dom Lucas Barber Club & Spa (TESTE VIP)",
+    buyerName: "Lucas Silveira",
+    routeId: "R1",
+    vendorName: "Alisson",
+    amount: 720.0,
+    saleDate: "2026-07-18",
+    scheduledDate: "2026-08-18",
+    paymentMethod: "PA",
+    status: "OVERDUE",
+    notes: "P.A. Vencido em 18/08/2026 - Em cobrança amigável pela rota R1",
+  },
+  {
+    id: "pa-test-005",
+    clientName: "Studio Beleza Real & Barbearia Vip (TESTE SHOWROOM)",
+    buyerName: "Juliana Matos",
+    routeId: "F2",
+    vendorName: "Alexandre",
+    amount: 1200.0,
+    saleDate: "2026-08-10",
+    scheduledDate: "2026-08-24",
+    receivedDate: "2026-08-24",
+    paymentMethod: "CASH",
+    status: "RECEIVED",
+    notes: "Recebido em Dinheiro pelo vendedor Alexandre na rota F2",
+    auditTrail: ["24/08/2026 16:15 - Recebimento em espécie conferido"],
+  },
+  {
+    id: "pa-test-006",
+    clientName: "Studio Beleza Real & Barbearia Vip (TESTE SHOWROOM)",
+    buyerName: "Juliana Matos",
+    routeId: "F2",
+    vendorName: "Alexandre",
+    amount: 1680.0,
+    saleDate: "2026-08-14",
+    scheduledDate: "2026-08-29",
+    paymentMethod: "BOLETO",
+    status: "PENDING",
+    notes: "Boleto bancário 15 dias - Linha Lavatório + Finalizadores",
+  },
+  {
+    id: "pa-test-007",
+    clientName: "Studio Beleza Real & Barbearia Vip (TESTE SHOWROOM)",
+    buyerName: "Diego Fernandes",
+    routeId: "F2",
+    vendorName: "Alexandre",
+    amount: 850.0,
+    saleDate: "2026-08-22",
+    scheduledDate: "2026-09-20",
+    paymentMethod: "PA",
+    status: "NEXT_MONTH",
+    notes: "Programado para o próximo ciclo de visitas (Setembro)",
+  },
+  {
+    id: "pa-test-008",
+    clientName: "Studio Beleza Real & Barbearia Vip (TESTE SHOWROOM)",
+    buyerName: "Juliana Matos",
+    routeId: "F2",
+    vendorName: "Alexandre",
+    amount: 540.0,
+    saleDate: "2026-07-20",
+    scheduledDate: "2026-08-12",
+    paymentMethod: "PA",
+    status: "OVERDUE",
+    notes: "P.A. Vencido em 12/08/2026 - Cobrança na próxima visita Rota F2",
+  },
   {
     id: "pa-001",
     clientName: "Barbearia Vip Curvelo",
@@ -352,13 +486,17 @@ export default function LukeFinanceiroPage() {
         if (!paySnap.empty) {
           const pList: PayableItem[] = [];
           paySnap.forEach((d) => pList.push({ id: d.id, ...d.data() } as PayableItem));
-          setPayables(pList);
+          const testPayables = INITIAL_PAYABLES.filter((p) => p.id.startsWith("pay-test-"));
+          const mergedPay = [...testPayables.filter((tp) => !pList.some((p) => p.id === tp.id)), ...pList];
+          setPayables(mergedPay);
         }
 
         if (!recSnap.empty) {
           const rList: ReceivableItem[] = [];
           recSnap.forEach((d) => rList.push({ id: d.id, ...d.data() } as ReceivableItem));
-          setReceivables(rList);
+          const testRec = INITIAL_RECEIVABLES.filter((r) => r.id.startsWith("pa-test-"));
+          const mergedRec = [...testRec.filter((tr) => !rList.some((r) => r.id === tr.id)), ...rList];
+          setReceivables(mergedRec);
         }
       } catch (err: any) {
         console.warn("Firestore finance fallback to initial:", err.message);

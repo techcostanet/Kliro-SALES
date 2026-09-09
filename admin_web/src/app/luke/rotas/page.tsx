@@ -42,9 +42,13 @@ import Link from "next/link";
 
 // Dados iniciais replicando fielmente o calendário real da LUKE (Agosto 2026 / Google Calendar)
 const INITIAL_SCHEDULED_EVENTS: ScheduledRouteEvent[] = [
+  // Eventos de Teste e Demonstração para os Salões de Teste
+  { id: "ev-test-sep-1", date: "2026-09-08", routeCode: "R1", routeName: "Rota R1 - Centro & Savassi (TESTE VIP)", vendorName: "Alisson", vendorColor: "#10b981", status: "COMPLETED", totalClients: 24, completedVisits: 24, totalSales: 5450, notes: "Visita Master Barbearia Dom Lucas Barber Club (TESTE VIP) realizada com sucesso" },
+  { id: "ev-test-sep-2", date: "2026-09-09", routeCode: "F2", routeName: "Rota F2 - Pampulha (TESTE SHOWROOM)", vendorName: "Alexandre", vendorColor: "#0ea5e9", status: "SCHEDULED", totalClients: 23, completedVisits: 0, totalSales: 0, notes: "Apresentação e Visita Técnica no Studio Beleza Real & Barbearia Vip (TESTE SHOWROOM)" },
+
   // Semana 1
-  { id: "ev-1", date: "2026-08-04", routeCode: "F2", routeName: "Rota F2 - Pampulha & Norte", vendorName: "Alexandre", vendorColor: "#0ea5e9", status: "COMPLETED", totalClients: 23, completedVisits: 23, totalSales: 4210, notes: "Atendido 100%" },
-  { id: "ev-2", date: "2026-08-04", routeCode: "R1", routeName: "Rota R1 - Centro & Região", vendorName: "Alisson", vendorColor: "#10b981", status: "COMPLETED", totalClients: 24, completedVisits: 24, totalSales: 4850 },
+  { id: "ev-1", date: "2026-08-04", routeCode: "F2", routeName: "Rota F2 - Pampulha & Norte", vendorName: "Alexandre", vendorColor: "#0ea5e9", status: "COMPLETED", totalClients: 23, completedVisits: 23, totalSales: 4210, notes: "Atendido 100% • Visita Showroom Studio Beleza Real concluída" },
+  { id: "ev-2", date: "2026-08-04", routeCode: "R1", routeName: "Rota R1 - Centro & Região", vendorName: "Alisson", vendorColor: "#10b981", status: "COMPLETED", totalClients: 24, completedVisits: 24, totalSales: 4850, notes: "Atendimento prioritário Barbearia Dom Lucas (TESTE VIP) concluído com venda" },
   { id: "ev-3", date: "2026-08-04", routeCode: "R3", routeName: "Rota R3 - Barreiro & Contorno", vendorName: "Lucas", vendorColor: "#8b5cf6", status: "COMPLETED", totalClients: 26, completedVisits: 26, totalSales: 6380 },
   { id: "ev-4", date: "2026-08-05", routeCode: "F1", routeName: "Rota F1 - Leste & Savassi", vendorName: "Alexandre", vendorColor: "#0ea5e9", status: "COMPLETED", totalClients: 20, completedVisits: 20, totalSales: 4490 },
   { id: "ev-5", date: "2026-08-05", routeCode: "F12", routeName: "Rota F12 - Vespasiano", vendorName: "Alexandre", vendorColor: "#0ea5e9", status: "COMPLETED", totalClients: 22, completedVisits: 22, totalSales: 4100 },
