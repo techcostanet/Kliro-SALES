@@ -16,10 +16,13 @@ import {
   Building2,
   Eye,
   EyeOff,
+  Settings,
+  History,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { PrivacyProvider, usePrivacy } from "@/lib/privacyContext";
+import { PermissionsProvider, usePermissions, MenuPermissionKey } from "@/lib/permissionsContext";
 
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -30,6 +33,7 @@ function LukeSidebarContent({ children }: { children: React.ReactNode }) {
   const [companyLogo, setCompanyLogo] = useState<string | null>("/images/luke-logo.png");
   const [companyName, setCompanyName] = useState<string>("LUKE Brasil");
   const { hideValues, togglePrivacy } = usePrivacy();
+  const { hasPermission } = usePermissions();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -58,23 +62,26 @@ function LukeSidebarContent({ children }: { children: React.ReactNode }) {
     window.location.href = "/";
   };
 
-  // Nomes de 1 palavra conforme Item 4
-  const navLinks = [
-    { label: "Visão", href: "/luke", icon: LayoutDashboard, exact: true },
-    { label: "Clientes", href: "/luke/clientes", icon: Store },
-    { label: "Rotas", href: "/luke/rotas", icon: Map },
-    { label: "Cargas", href: "/luke/carregamento", icon: Truck },
-    { label: "Financeiro", href: "/luke/financeiro", icon: DollarSign },
-    { label: "Transações", href: "/luke/transacoes", icon: Wallet },
-    { label: "Vendedores", href: "/luke/vendedores", icon: Users },
-    { label: "Produtos", href: "/luke/produtos", icon: Package },
-    { label: "Empresa", href: "/luke/empresa", icon: Building2 },
+  const navLinks: { label: string; href: string; icon: any; exact?: boolean; permissionKey: MenuPermissionKey }[] = [
+    { label: "Visão", href: "/luke", icon: LayoutDashboard, exact: true, permissionKey: "visao" },
+    { label: "Clientes", href: "/luke/clientes", icon: Store, permissionKey: "clientes" },
+    { label: "Rotas", href: "/luke/rotas", icon: Map, permissionKey: "rotas" },
+    { label: "Cargas", href: "/luke/carregamento", icon: Truck, permissionKey: "carregamento" },
+    { label: "Financeiro", href: "/luke/financeiro", icon: DollarSign, permissionKey: "financeiro" },
+    { label: "Transações", href: "/luke/transacoes", icon: Wallet, permissionKey: "transacoes" },
+    { label: "Vendedores", href: "/luke/vendedores", icon: Users, permissionKey: "vendedores" },
+    { label: "Produtos", href: "/luke/produtos", icon: Package, permissionKey: "produtos" },
+    { label: "Empresa", href: "/luke/empresa", icon: Building2, permissionKey: "empresa" },
+    { label: "Configurações", href: "/luke/configuracoes", icon: Settings, permissionKey: "configuracoes" },
+    { label: "Logs", href: "/luke/logs", icon: History, permissionKey: "logs" },
   ];
 
+  const visibleNavLinks = navLinks.filter((l) => hasPermission(l.permissionKey));
+
   return (
-    <div className="min-h-screen bg-brand-black flex flex-col md:flex-row">
+    <div className="min-h-screen bg-brand-black flex flex-col md:flex-row print:bg-white print:block">
       {/* Sidebar Corporativa */}
-      <aside className="w-full md:w-64 bg-brand-graphite border-r border-brand-blue/30 flex flex-col justify-between shrink-0">
+      <aside className="w-full md:w-64 bg-brand-graphite border-r border-brand-blue/30 flex flex-col justify-between shrink-0 print:hidden">
         <div>
           {/* Header com Logomarca Dinâmica */}
           <div className="p-5 border-b border-brand-blue/30 flex items-center justify-between">
@@ -104,9 +111,9 @@ function LukeSidebarContent({ children }: { children: React.ReactNode }) {
             </Link>
           </div>
 
-          {/* Navegação de Palavra Única */}
+          {/* Navegação Corporativa Filtrada por Permissões */}
           <nav className="flex-1 px-4 space-y-1 mt-4">
-            {navLinks.map((link) => {
+            {visibleNavLinks.map((link) => {
               const Icon = link.icon;
               const isActive = link.exact
                 ? pathname === link.href
@@ -128,16 +135,18 @@ function LukeSidebarContent({ children }: { children: React.ReactNode }) {
               );
             })}
 
-            {/* Atalho: Modo Rua */}
-            <div className="pt-3 border-t border-brand-blue/20">
-              <Link
-                href="/luke/rua"
-                className="flex items-center space-x-3 px-4 py-2.5 bg-brand-gold/15 text-brand-gold hover:bg-brand-gold/25 border border-brand-gold/30 rounded-lg font-bold transition shadow-md text-sm"
-              >
-                <span className="text-lg">📱</span>
-                <span>Rua</span>
-              </Link>
-            </div>
+            {/* Atalho: Modo Rua (se autorizado) */}
+            {hasPermission("rua") && (
+              <div className="pt-3 border-t border-brand-blue/20">
+                <Link
+                  href="/luke/rua"
+                  className="flex items-center space-x-3 px-4 py-2.5 bg-brand-gold/15 text-brand-gold hover:bg-brand-gold/25 border border-brand-gold/30 rounded-lg font-bold transition shadow-md text-sm"
+                >
+                  <span className="text-lg">📱</span>
+                  <span>Rua</span>
+                </Link>
+              </div>
+            )}
           </nav>
         </div>
 
@@ -183,7 +192,7 @@ function LukeSidebarContent({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Área de Conteúdo Principal */}
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto max-h-screen">
+      <main className="flex-1 p-4 md:p-8 overflow-y-auto max-h-screen print:p-0 print:m-0 print:max-h-none print:overflow-visible print:bg-white">
         {children}
       </main>
     </div>
@@ -196,8 +205,10 @@ export default function LukeDashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <PrivacyProvider>
-      <LukeSidebarContent>{children}</LukeSidebarContent>
-    </PrivacyProvider>
+    <PermissionsProvider>
+      <PrivacyProvider>
+        <LukeSidebarContent>{children}</LukeSidebarContent>
+      </PrivacyProvider>
+    </PermissionsProvider>
   );
 }

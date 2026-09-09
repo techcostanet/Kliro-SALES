@@ -30,14 +30,16 @@ import {
   Info,
   CalendarCheck,
   Check,
+  Printer,
 } from "lucide-react";
-import { collection, getDocs, doc, setDoc, deleteDoc } from "firebase/firestore";
+import { collection, getDocs, doc, setDoc, deleteDoc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { usePrivacy } from "@/lib/privacyContext";
 import { formatCurrency, formatNumberBR } from "@/lib/formatters";
 import { VENDOR_COLOR_PALETTE, getVendorColor, getVendorSolidBadgeStyles } from "@/lib/vendorColors";
 import { MASTER_ROUTES_CATALOG, RouteMaster, ScheduledRouteEvent } from "@/lib/routesCatalog";
 import VendorBadge from "@/components/VendorBadge";
+import RoutePrintSheet from "@/components/RoutePrintSheet";
 import Link from "next/link";
 
 // Dados iniciais replicando fielmente o calendário real da LUKE (Agosto 2026 / Google Calendar)
@@ -129,6 +131,12 @@ export default function LukeRotasPage() {
   const [editingEvent, setEditingEvent] = useState<ScheduledRouteEvent | null>(null);
   const [isGeneratorModalOpen, setIsGeneratorModalOpen] = useState(false);
 
+  // Impressão da Rota & Agenda
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [printMode, setPrintMode] = useState<"VENDOR_ROUTE" | "AGENDA_SCHEDULE">("VENDOR_ROUTE");
+  const [printTargetEvent, setPrintTargetEvent] = useState<ScheduledRouteEvent | null>(null);
+  const [companySettings, setCompanySettings] = useState<any>(null);
+
   // Formulário de Agendamento
   const [formData, setFormData] = useState<Partial<ScheduledRouteEvent>>({
     date: selectedDate,
@@ -177,6 +185,17 @@ export default function LukeRotasPage() {
 
   useEffect(() => {
     fetchSchedules();
+    const loadCompany = async () => {
+      try {
+        const snap = await getDoc(doc(db, "tenants/tenant_luke_001/settings", "company"));
+        if (snap.exists()) {
+          setCompanySettings(snap.data());
+        }
+      } catch (e) {
+        console.warn("Company settings fetch:", e);
+      }
+    };
+    loadCompany();
   }, []);
 
   // Sincronizar com o Firestore
@@ -451,6 +470,35 @@ export default function LukeRotasPage() {
     }
   };
 
+  // Impressão direta de uma rota (para entregar a folha de campo ao vendedor)
+  const handlePrintRouteDirectly = (ev: ScheduledRouteEvent) => {
+    setPrintTargetEvent(ev);
+    setPrintMode("VENDOR_ROUTE");
+    setTimeout(() => {
+      window.print();
+    }, 120);
+  };
+
+  // Abrir modal de impressão e pré-visualização de rota ou agenda
+  const handleOpenPrintModal = (
+    preselectedEvent?: ScheduledRouteEvent,
+    initialMode: "VENDOR_ROUTE" | "AGENDA_SCHEDULE" = "VENDOR_ROUTE"
+  ) => {
+    if (preselectedEvent) {
+      setPrintTargetEvent(preselectedEvent);
+      setPrintMode(initialMode);
+    } else {
+      const todayEvs = eventsByDate[selectedDate] || [];
+      if (todayEvs.length > 0) {
+        setPrintTargetEvent(todayEvs[0]);
+      } else if (scheduledEvents.length > 0) {
+        setPrintTargetEvent(scheduledEvents[0]);
+      }
+      setPrintMode(initialMode);
+    }
+    setIsPrintModalOpen(true);
+  };
+
   // Gerador Automático de Cronograma Mensal
   const handleGenerateMonthSchedule = () => {
     const monthPrefix = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}`;
@@ -602,7 +650,8 @@ export default function LukeRotasPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <>
+      <div className="space-y-6 print:hidden">
       {/* Cabeçalho Principal */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
@@ -678,6 +727,16 @@ export default function LukeRotasPage() {
           >
             <Wand2 size={15} />
             <span>Montar Mês</span>
+          </button>
+
+          {/* Imprimir Rota / Agenda */}
+          <button
+            onClick={() => handleOpenPrintModal(undefined, "VENDOR_ROUTE")}
+            className="flex items-center space-x-1.5 bg-brand-blue/40 border border-brand-gold/40 text-brand-gold hover:bg-brand-blue/60 px-3.5 py-2 rounded-xl font-bold transition text-xs shadow-md"
+            title="Imprimir Roteiro do Vendedor ou Agenda Geral"
+          >
+            <Printer size={15} />
+            <span>Imprimir</span>
           </button>
 
           {/* Nova Rota */}
@@ -1036,9 +1095,21 @@ export default function LukeRotasPage() {
 
                           <div className="flex items-center justify-between pt-1 border-t border-brand-blue/10">
                             <VendorBadge vendorName={ev.vendorName} color={color} size="xs" variant="pill" />
-                            <span className="text-[11px] font-bold text-brand-gold font-mono">
-                              {ev.totalSales && ev.totalSales > 0 ? formatValue(ev.totalSales, "currency") : `${ev.totalClients} cli`}
-                            </span>
+                            <div className="flex items-center space-x-1.5">
+                              <span className="text-[11px] font-bold text-brand-gold font-mono">
+                                {ev.totalSales && ev.totalSales > 0 ? formatValue(ev.totalSales, "currency") : `${ev.totalClients} cli`}
+                              </span>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handlePrintRouteDirectly(ev);
+                                }}
+                                className="p-1 text-brand-offwhite/40 hover:text-brand-gold hover:bg-brand-blue/30 rounded transition"
+                                title="Imprimir Roteiro do Vendedor"
+                              >
+                                <Printer size={12} />
+                              </button>
+                            </div>
                           </div>
                         </div>
                       );
@@ -1179,7 +1250,15 @@ export default function LukeRotasPage() {
                       <ArrowRight size={13} />
                     </Link>
 
-                    <div className="flex items-center space-x-1">
+                    <div className="flex items-center space-x-1.5">
+                      <button
+                        onClick={() => handlePrintRouteDirectly(ev)}
+                        className="flex items-center space-x-1 px-2.5 py-1.5 bg-brand-gold/15 text-brand-gold hover:bg-brand-gold hover:text-brand-black border border-brand-gold/30 rounded-lg text-xs font-bold transition shadow-xs"
+                        title="Imprimir Roteiro da Rota para o Vendedor"
+                      >
+                        <Printer size={13} />
+                        <span>Imprimir</span>
+                      </button>
                       <button
                         onClick={() => handleEditEvent(ev)}
                         className="p-1.5 text-brand-offwhite/60 hover:text-brand-gold rounded-lg hover:bg-brand-blue/20 transition"
@@ -1286,6 +1365,13 @@ export default function LukeRotasPage() {
                         </td>
 
                         <td className="p-4 text-right space-x-2 whitespace-nowrap">
+                          <button
+                            onClick={() => handlePrintRouteDirectly(ev)}
+                            className="text-brand-offwhite/60 hover:text-brand-gold p-1.5 rounded-lg hover:bg-brand-blue/10 transition inline-flex items-center"
+                            title="Imprimir Roteiro do Vendedor"
+                          >
+                            <Printer size={16} />
+                          </button>
                           <button
                             onClick={() => handleEditEvent(ev)}
                             className="text-brand-offwhite/50 hover:text-brand-gold p-1.5 rounded-lg hover:bg-brand-blue/10 transition"
@@ -1483,13 +1569,27 @@ export default function LukeRotasPage() {
               {/* Botões de Ação */}
               <div className="flex items-center justify-between pt-4 border-t border-brand-blue/30">
                 {editingEvent ? (
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteEvent(editingEvent.id)}
-                    className="px-3 py-2 text-xs font-bold text-rose-400 hover:bg-rose-500/10 rounded-lg transition"
-                  >
-                    Excluir Rota
-                  </button>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteEvent(editingEvent.id)}
+                      className="px-3 py-2 text-xs font-bold text-rose-400 hover:bg-rose-500/10 rounded-lg transition"
+                    >
+                      Excluir
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEventModalOpen(false);
+                        handlePrintRouteDirectly(editingEvent);
+                      }}
+                      className="flex items-center space-x-1.5 px-3 py-2 text-xs font-bold text-brand-gold bg-brand-blue/40 border border-brand-gold/30 rounded-lg hover:bg-brand-blue/60 transition"
+                      title="Imprimir Folha da Rota"
+                    >
+                      <Printer size={13} />
+                      <span>Imprimir Folha</span>
+                    </button>
+                  </div>
                 ) : <div />}
 
                 <div className="flex items-center space-x-2">
@@ -1578,6 +1678,185 @@ export default function LukeRotasPage() {
           </div>
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: IMPRESSÃO DA ROTA & AGENDA                                          */}
+      {/* ========================================================================= */}
+      {isPrintModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-brand-black/85 backdrop-blur-sm animate-fadeIn print:hidden">
+          <div className="bg-brand-graphite w-full max-w-4xl rounded-2xl border border-brand-blue/40 shadow-2xl p-6 relative max-h-[92vh] flex flex-col">
+            {/* Botão Fechar */}
+            <button
+              onClick={() => setIsPrintModalOpen(false)}
+              className="absolute top-4 right-4 text-brand-offwhite/50 hover:text-brand-offwhite p-1 rounded-lg hover:bg-brand-blue/20 transition"
+            >
+              <X size={20} />
+            </button>
+
+            {/* Cabeçalho do Modal */}
+            <div className="flex items-center space-x-3 mb-4 shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-brand-gold/20 text-brand-gold flex items-center justify-center border border-brand-gold/30">
+                <Printer size={20} />
+              </div>
+              <div>
+                <h3 className="text-xl font-black text-brand-offwhite tracking-tight">
+                  Impressão de Rotas & Agenda
+                </h3>
+                <p className="text-xs text-brand-offwhite/60">
+                  Gere a folha de atendimento para entregar ao vendedor ou imprima o cronograma da agenda.
+                </p>
+              </div>
+            </div>
+
+            {/* Seletor de Tipo de Impressão */}
+            <div className="grid grid-cols-2 gap-3 mb-4 shrink-0">
+              <button
+                type="button"
+                onClick={() => setPrintMode("VENDOR_ROUTE")}
+                className={`flex items-center justify-center space-x-2 p-3 rounded-xl border text-xs font-bold transition shadow-sm ${
+                  printMode === "VENDOR_ROUTE"
+                    ? "bg-brand-gold text-brand-black border-brand-gold"
+                    : "bg-brand-black/60 text-brand-offwhite/70 border-brand-blue/40 hover:text-brand-offwhite hover:bg-brand-blue/20"
+                }`}
+              >
+                <Users size={16} />
+                <span>Roteiro de Campo do Vendedor (Folha de Visitas)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPrintMode("AGENDA_SCHEDULE")}
+                className={`flex items-center justify-center space-x-2 p-3 rounded-xl border text-xs font-bold transition shadow-sm ${
+                  printMode === "AGENDA_SCHEDULE"
+                    ? "bg-brand-gold text-brand-black border-brand-gold"
+                    : "bg-brand-black/60 text-brand-offwhite/70 border-brand-blue/40 hover:text-brand-offwhite hover:bg-brand-blue/20"
+                }`}
+              >
+                <CalendarIcon size={16} />
+                <span>Agenda & Cronograma Geral (Escala de Rotas)</span>
+              </button>
+            </div>
+
+            {/* Barra de Filtros e Seleção Rápida */}
+            {printMode === "VENDOR_ROUTE" && (
+              <div className="bg-brand-black/60 p-3.5 rounded-xl border border-brand-blue/40 mb-3 shrink-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="flex-1 w-full sm:w-auto">
+                  <label className="block text-[11px] font-semibold text-brand-offwhite/70 mb-1">
+                    Selecione a Rota / Vendedor para Imprimir:
+                  </label>
+                  <select
+                    value={printTargetEvent?.id || ""}
+                    onChange={(e) => {
+                      const found = scheduledEvents.find((ev) => ev.id === e.target.value);
+                      if (found) setPrintTargetEvent(found);
+                    }}
+                    className="w-full bg-brand-graphite border border-brand-blue/50 text-brand-offwhite rounded-lg px-3 py-1.5 text-xs font-bold focus:outline-none focus:border-brand-gold"
+                  >
+                    {scheduledEvents
+                      .sort((a, b) => a.date.localeCompare(b.date))
+                      .map((ev) => (
+                        <option key={ev.id} value={ev.id}>
+                          {ev.date.split("-").reverse().join("/")} &bull; {ev.routeCode} - {ev.routeName} ({ev.vendorName})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                {printTargetEvent && (
+                  <div className="flex items-center space-x-3 shrink-0 pt-2 sm:pt-4">
+                    <VendorBadge
+                      vendorName={printTargetEvent.vendorName}
+                      color={printTargetEvent.vendorColor}
+                      size="sm"
+                      variant="chip"
+                    />
+                    <span className="text-xs font-mono font-bold text-brand-gold">
+                      {printTargetEvent.totalClients} clientes previstos
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {printMode === "AGENDA_SCHEDULE" && (
+              <div className="bg-brand-black/60 p-3 rounded-xl border border-brand-blue/40 mb-3 shrink-0 flex items-center justify-between text-xs text-brand-offwhite/80">
+                <span>
+                  Mostrando todas as <strong>{scheduledEvents.length} rotas escaladas</strong> em {MONTH_NAMES[currentMonth]} {currentYear}.
+                </span>
+                <span className="text-brand-gold font-bold">
+                  {scheduledEvents.reduce((acc, c) => acc + (c.totalClients || 0), 0)} visitas totais
+                </span>
+              </div>
+            )}
+
+            {/* Área de Pré-visualização da Folha de Impressão */}
+            <div className="flex-1 overflow-y-auto bg-neutral-800 p-4 rounded-xl border border-brand-blue/40 shadow-inner custom-scrollbar min-h-[280px]">
+              <div className="bg-white text-black rounded-lg shadow-2xl overflow-hidden max-w-3xl mx-auto">
+                <RoutePrintSheet
+                  mode={printMode}
+                  event={printTargetEvent || (scheduledEvents.length > 0 ? scheduledEvents[0] : null)}
+                  eventsList={scheduledEvents}
+                  selectedDate={selectedDate}
+                  periodLabel={
+                    viewMode === "MONTH"
+                      ? `Mês de ${MONTH_NAMES[currentMonth]} de ${currentYear}`
+                      : viewMode === "WEEK"
+                      ? `Semana de ${selectedDate.split("-").reverse().join("/")}`
+                      : `Operação do Dia ${selectedDate.split("-").reverse().join("/")}`
+                  }
+                  companyInfo={companySettings}
+                />
+              </div>
+            </div>
+
+            {/* Rodapé de Ações */}
+            <div className="flex items-center justify-between pt-4 border-t border-brand-blue/30 mt-3 shrink-0">
+              <span className="text-[11px] text-brand-offwhite/50 hidden sm:inline">
+                💡 Dica: Você pode imprimir fisicamente ou salvar como PDF no navegador.
+              </span>
+
+              <div className="flex items-center space-x-3 ml-auto">
+                <button
+                  type="button"
+                  onClick={() => setIsPrintModalOpen(false)}
+                  className="px-4 py-2 text-sm text-brand-offwhite/70 hover:text-brand-offwhite transition"
+                >
+                  Fechar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-6 py-2.5 bg-brand-gold text-brand-black rounded-xl font-black hover:bg-yellow-500 transition shadow-lg text-sm flex items-center space-x-2"
+                >
+                  <Printer size={16} />
+                  <span>Imprimir Agora (Ctrl + P)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+
+    {/* ========================================================================= */}
+    {/* DOCUMENTO EXCLUSIVO PARA IMPRESSÃO DO NAVEGADOR (@media print)            */}
+    {/* ========================================================================= */}
+    <div className="hidden print:block">
+      <RoutePrintSheet
+        mode={printMode}
+        event={printTargetEvent || (scheduledEvents.length > 0 ? scheduledEvents[0] : null)}
+        eventsList={scheduledEvents}
+        selectedDate={selectedDate}
+        periodLabel={
+          viewMode === "MONTH"
+            ? `Mês de ${MONTH_NAMES[currentMonth]} de ${currentYear}`
+            : viewMode === "WEEK"
+            ? `Semana de ${selectedDate.split("-").reverse().join("/")}`
+            : `Operação do Dia ${selectedDate.split("-").reverse().join("/")}`
+        }
+        companyInfo={companySettings}
+      />
+    </div>
+  </>
   );
 }

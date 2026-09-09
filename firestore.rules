@@ -57,6 +57,18 @@ service cloud.firestore {
         allow read, write: if isAuthenticated();
       }
 
+      // Subcoleção de Condições de Pagamento
+      match /payment_terms/{termId} {
+        allow read, write: if isAuthenticated();
+      }
+
+      // Subcoleção de Logs de Atividades do Sistema (Audit Trail Imutável)
+      match /activity_logs/{logId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated();
+        allow update, delete: if false; // Anti-Fraude: Logs de auditoria são imutáveis
+      }
+
       // Subcoleção de Execuções de Rotas (Modo Rua)
       match /route_executions/{executionId} {
         allow read: if isAuthenticated();

@@ -6,6 +6,16 @@ import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { usePrivacy } from "@/lib/privacyContext";
 import VendorBadge from "@/components/VendorBadge";
+import ColumnOrganizer, { ColumnDefinition } from "@/components/ColumnOrganizer";
+
+const TRANSACTION_COLUMNS: ColumnDefinition[] = [
+  { key: "client", label: "Salão / Cliente", defaultVisible: true },
+  { key: "vendor", label: "Vendedor", defaultVisible: true },
+  { key: "method", label: "Forma de Pagamento", defaultVisible: true },
+  { key: "amount", label: "Valor", defaultVisible: true },
+  { key: "date", label: "Data & Horário", defaultVisible: true },
+  { key: "status", label: "Status", defaultVisible: true },
+];
 
 export interface TransactionItem {
   id: string;
@@ -168,6 +178,16 @@ export default function LukeTransacoesPage() {
   const cashTotal = useMemo(() => transactions.filter((t) => t.paymentMethod === "CASH").reduce((acc, t) => acc + t.amount, 0), [transactions]);
   const ticketTotal = useMemo(() => transactions.filter((t) => t.paymentMethod === "TICKET").reduce((acc, t) => acc + t.amount, 0), [transactions]);
 
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("kliro_cols_transacoes");
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return TRANSACTION_COLUMNS.map((c) => c.key);
+  });
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -223,7 +243,7 @@ export default function LukeTransacoesPage() {
       </div>
 
       <div className="bg-brand-graphite rounded-2xl border border-brand-blue/30 shadow-xl overflow-hidden">
-        <div className="p-4 border-b border-brand-blue/30 flex justify-between items-center bg-brand-black/50">
+        <div className="p-4 border-b border-brand-blue/30 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 bg-brand-black/50">
           <div className="relative w-full max-w-xs">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search className="h-4 w-4 text-brand-offwhite/40" />
@@ -237,7 +257,7 @@ export default function LukeTransacoesPage() {
             />
           </div>
 
-          <div className="flex space-x-2">
+          <div className="flex items-center space-x-2">
             <select
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
@@ -249,6 +269,14 @@ export default function LukeTransacoesPage() {
               <option value="TICKET">Prazo</option>
               <option value="DEVOLUÇÃO">Devolução</option>
             </select>
+
+            {/* Organizador de Colunas (Requisito 15) */}
+            <ColumnOrganizer
+              storageKey="kliro_cols_transacoes"
+              columns={TRANSACTION_COLUMNS}
+              visibleColumns={visibleColumns}
+              onChange={setVisibleColumns}
+            />
           </div>
         </div>
 
@@ -256,48 +284,60 @@ export default function LukeTransacoesPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-brand-blue/10 border-b border-brand-blue/30 text-brand-offwhite/70 text-xs uppercase tracking-wider">
-                <th className="p-4 font-medium">Salão</th>
-                <th className="p-4 font-medium">Vendedor</th>
-                <th className="p-4 font-medium">Forma</th>
-                <th className="p-4 font-medium">Valor</th>
-                <th className="p-4 font-medium">Data</th>
-                <th className="p-4 font-medium">Status</th>
+                {visibleColumns.includes("client") && <th className="p-4 font-medium">Salão / Cliente</th>}
+                {visibleColumns.includes("vendor") && <th className="p-4 font-medium">Vendedor</th>}
+                {visibleColumns.includes("method") && <th className="p-4 font-medium">Forma de Pagamento</th>}
+                {visibleColumns.includes("amount") && <th className="p-4 font-medium">Valor</th>}
+                {visibleColumns.includes("date") && <th className="p-4 font-medium">Data & Horário</th>}
+                {visibleColumns.includes("status") && <th className="p-4 font-medium">Status</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-brand-blue/10 text-sm">
               {filtered.map((t) => (
                 <tr key={t.id} className="hover:bg-brand-blue/5 transition">
-                  <td className="p-4 font-bold text-brand-offwhite">{t.clientName}</td>
-                  <td className="p-4">
-                    <VendorBadge vendorName={t.vendorName} size="xs" variant="chip" />
-                  </td>
-                  <td className="p-4">
-                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-blue/20 text-brand-offwhite border border-brand-blue/40">
-                      {t.paymentMethod === "PIX" && <QrCode size={12} className="text-teal-400" />}
-                      {t.paymentMethod === "CASH" && <Banknote size={12} className="text-brand-gold" />}
-                      {t.paymentMethod === "TICKET" && <FileText size={12} className="text-purple-400" />}
-                      <span>{t.paymentMethod}</span>
-                    </span>
-                  </td>
-                  <td className="p-4 font-mono font-bold">
-                    <span className={t.amount > 0 ? "text-emerald-400" : "text-rose-400"}>
-                      {formatValue(t.amount)}
-                    </span>
-                  </td>
-                  <td className="p-4 text-brand-offwhite/50 text-xs">{t.date}</td>
-                  <td className="p-4">
-                    <span
-                      className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
-                        t.status === "CONCILIADO"
-                          ? "bg-green-500/10 text-green-400 border-green-500/20"
-                          : t.status === "A_RECEBER"
-                          ? "bg-purple-500/10 text-purple-400 border-purple-500/20"
-                          : "bg-blue-500/10 text-blue-400 border-blue-500/20"
-                      }`}
-                    >
-                      {t.status === "CONCILIADO" ? "Conciliado" : t.status === "A_RECEBER" ? "A Prazo" : "Processado"}
-                    </span>
-                  </td>
+                  {visibleColumns.includes("client") && (
+                    <td className="p-4 font-bold text-brand-offwhite">{t.clientName}</td>
+                  )}
+                  {visibleColumns.includes("vendor") && (
+                    <td className="p-4">
+                      <VendorBadge vendorName={t.vendorName} size="xs" variant="chip" />
+                    </td>
+                  )}
+                  {visibleColumns.includes("method") && (
+                    <td className="p-4">
+                      <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-blue/20 text-brand-offwhite border border-brand-blue/40">
+                        {t.paymentMethod === "PIX" && <QrCode size={12} className="text-teal-400" />}
+                        {t.paymentMethod === "CASH" && <Banknote size={12} className="text-brand-gold" />}
+                        {t.paymentMethod === "TICKET" && <FileText size={12} className="text-purple-400" />}
+                        <span>{t.paymentMethod}</span>
+                      </span>
+                    </td>
+                  )}
+                  {visibleColumns.includes("amount") && (
+                    <td className="p-4 font-mono font-bold">
+                      <span className={t.amount > 0 ? "text-emerald-400" : "text-rose-400"}>
+                        {formatValue(t.amount)}
+                      </span>
+                    </td>
+                  )}
+                  {visibleColumns.includes("date") && (
+                    <td className="p-4 text-brand-offwhite/50 text-xs font-mono">{t.date}</td>
+                  )}
+                  {visibleColumns.includes("status") && (
+                    <td className="p-4">
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                          t.status === "CONCILIADO"
+                            ? "bg-green-500/10 text-green-400 border-green-500/20"
+                            : t.status === "A_RECEBER"
+                            ? "bg-purple-500/10 text-purple-400 border-purple-500/20"
+                            : "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                        }`}
+                      >
+                        {t.status === "CONCILIADO" ? "Conciliado" : t.status === "A_RECEBER" ? "A Prazo" : "Processado"}
+                      </span>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

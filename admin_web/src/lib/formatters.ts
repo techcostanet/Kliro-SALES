@@ -112,3 +112,66 @@ export function getWhatsAppLink(phone: string | null | undefined, message?: stri
   }
   return baseUrl;
 }
+
+/**
+ * Máscara dinâmica de digitação para telefones fixos e celulares (pt-BR)
+ * Ex: (31) 98888-1234 ou (31) 3344-5566
+ */
+export function maskPhone(value: string | null | undefined): string {
+  if (!value) return "";
+  const digits = cleanPhoneDigits(value).slice(0, 11);
+  if (digits.length === 0) return "";
+  if (digits.length <= 2) return `(${digits}`;
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
+/**
+ * Máscara monetária em tempo real enquanto o usuário digita (estilo caixa eletrônico)
+ * Converte dígitos brutos em valor BRL formatado e numérico
+ */
+export function formatCurrencyInput(value: string | number | null | undefined): { raw: number; formatted: string } {
+  if (value === null || value === undefined || value === "") {
+    return { raw: 0, formatted: "R$ 0,00" };
+  }
+  const cleanDigits = String(value).replace(/\D/g, "");
+  const num = parseInt(cleanDigits || "0", 10) / 100;
+  return {
+    raw: num,
+    formatted: formatCurrency(num),
+  };
+}
+
+/**
+ * Busca dados de endereço via CEP na API oficial do ViaCEP
+ */
+export async function fetchAddressByCep(cep: string): Promise<{
+  street: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+  complement?: string;
+} | null> {
+  const digits = cleanPhoneDigits(cep);
+  if (digits.length !== 8) return null;
+  try {
+    const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.erro) return null;
+    return {
+      street: data.logradouro || "",
+      neighborhood: data.bairro || "",
+      city: data.localidade || "",
+      state: data.uf || "",
+      complement: data.complemento || "",
+    };
+  } catch (err) {
+    console.warn("Erro ao consultar ViaCEP:", err);
+    return null;
+  }
+}
+

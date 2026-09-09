@@ -22,3 +22,48 @@ body {
   font-family: Arial, Helvetica, sans-serif;
   @apply antialiased;
 }
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm 8mm;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Ocultar navegação, sidebars e cabeçalhos do app */
+  aside,
+  nav,
+  header,
+  .no-print,
+  .print-hidden {
+    display: none !important;
+  }
+
+  /* Ocultar tudo que não for a área exclusiva de impressão */
+  .screen-only {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .print-avoid-break {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+}

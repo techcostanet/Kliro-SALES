@@ -24,10 +24,24 @@ import {
 import { collection, getDocs, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { usePrivacy } from "@/lib/privacyContext";
-import { formatCurrency, formatPhoneBR, getWhatsAppLink } from "@/lib/formatters";
+import { formatCurrency, formatPhoneBR, getWhatsAppLink, maskPhone } from "@/lib/formatters";
 import { VENDOR_COLOR_PALETTE, getVendorColor } from "@/lib/vendorColors";
 import VendorBadge from "@/components/VendorBadge";
+import ColumnOrganizer, { ColumnDefinition } from "@/components/ColumnOrganizer";
+import ToastFeedback, { ToastMessage } from "@/components/ToastFeedback";
+import { logActivity } from "@/lib/activityLogger";
 import Link from "next/link";
+
+const VENDOR_COLUMNS: ColumnDefinition[] = [
+  { key: "vendor", label: "Vendedor & Contato", defaultVisible: true },
+  { key: "role", label: "Função", defaultVisible: true },
+  { key: "vehicle", label: "Veículo & Placa", defaultVisible: true },
+  { key: "routes", label: "Prefixos Habituais", defaultVisible: true },
+  { key: "commission", label: "Comissão", defaultVisible: true },
+  { key: "target", label: "Meta Mensal", defaultVisible: true },
+  { key: "status", label: "Status", defaultVisible: true },
+  { key: "actions", label: "Ações", defaultVisible: true, alwaysVisible: true },
+];
 
 export interface VendorItem {
   id: string;
@@ -116,6 +130,17 @@ export default function LukeVendedoresPage() {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRoleFilter, setSelectedRoleFilter] = useState("ALL");
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("kliro_cols_vendedores");
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return VENDOR_COLUMNS.map((c) => c.key);
+  });
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -272,13 +297,27 @@ export default function LukeVendedoresPage() {
     try {
       await setDoc(doc(db, `tenants/${tenantId}/users`, payload.id), {
         ...payload,
-        updatedAt: new Date(),
+        updatedAt: new Date().toISOString(),
+      });
+      await logActivity(tenantId, {
+        userName: "Administrador",
+        userEmail: "admin@luke.com",
+        action: editingVendor ? "USUARIO_EDITADO" : "USUARIO_CRIADO",
+        entity: "USUARIO",
+        entityId: payload.id,
+        details: `${editingVendor ? "Editou" : "Cadastrou"} vendedor ${payload.name} (${payload.role}).`,
       });
     } catch (err) {
       console.warn("Gravado localmente:", err);
     }
 
     setIsModalOpen(false);
+    setEditingVendor(null);
+    setToast({
+      type: "success",
+      title: editingVendor ? "Vendedor Atualizado!" : "Vendedor Cadastrado!",
+      message: `${payload.name} foi salvo com sucesso.`,
+    });
   };
 
   const handleToggleStatus = async (v: VendorItem) => {
@@ -290,18 +329,47 @@ export default function LukeVendedoresPage() {
     try {
       await setDoc(
         doc(db, `tenants/${tenantId}/users`, v.id),
-        { status: updatedStatus, updatedAt: new Date() },
+        { status: updatedStatus, updatedAt: new Date().toISOString() },
         { merge: true }
       );
+      await logActivity(tenantId, {
+        userName: "Administrador",
+        userEmail: "admin@luke.com",
+        action: "USUARIO_EDITADO",
+        entity: "USUARIO",
+        entityId: v.id,
+        details: `Alterou status de ${v.name} para ${updatedStatus}.`,
+      });
     } catch (e) {}
+
+    setToast({
+      type: "info",
+      title: "Status Atualizado",
+      message: `${v.name} agora está ${updatedStatus === "ACTIVE" ? "Ativo" : "Inativo"}.`,
+    });
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm("Deseja realmente remover este integrante da equipe?")) {
+    const found = vendors.find((v) => v.id === id);
+    if (confirm(`Deseja realmente remover ${found?.name || "este integrante"} da equipe?`)) {
       setVendors((prev) => prev.filter((v) => v.id !== id));
       try {
         await deleteDoc(doc(db, `tenants/${tenantId}/users`, id));
+        await logActivity(tenantId, {
+          userName: "Administrador",
+          userEmail: "admin@luke.com",
+          action: "USUARIO_EXCLUIDO",
+          entity: "USUARIO",
+          entityId: id,
+          details: `Removeu o usuário/vendedor ${found?.name || id} do sistema.`,
+        });
       } catch (e) {}
+
+      setToast({
+        type: "info",
+        title: "Vendedor Removido",
+        message: `${found?.name || "Integrante"} foi excluído.`,
+      });
     }
   };
 
@@ -315,6 +383,9 @@ export default function LukeVendedoresPage() {
 
   return (
     <div className="space-y-8">
+      {/* Toast de Confirmação Visual (Requisito 13) */}
+      <ToastFeedback toast={toast} onClose={() => setToast(null)} />
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -452,6 +523,14 @@ export default function LukeVendedoresPage() {
               <option value="ADMIN">Administração</option>
               <option value="SUPERVISOR">Supervisor</option>
             </select>
+
+            {/* Organizador de Colunas (Requisito 15) */}
+            <ColumnOrganizer
+              storageKey="kliro_cols_vendedores"
+              columns={VENDOR_COLUMNS}
+              visibleColumns={visibleColumns}
+              onChange={setVisibleColumns}
+            />
           </div>
         </div>
 
@@ -459,14 +538,14 @@ export default function LukeVendedoresPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-brand-blue/10 border-b border-brand-blue/30 text-brand-offwhite/70 text-xs uppercase tracking-wider">
-                <th className="p-4 font-medium">Vendedor & Cor</th>
-                <th className="p-4 font-medium">Função</th>
-                <th className="p-4 font-medium">Veículo</th>
-                <th className="p-4 font-medium">Prefixos Habituais</th>
-                <th className="p-4 font-medium">Comissão</th>
-                <th className="p-4 font-medium">Meta</th>
-                <th className="p-4 font-medium">Status</th>
-                <th className="p-4 font-medium text-right">Ações</th>
+                {visibleColumns.includes("vendor") && <th className="p-4 font-medium">Vendedor & Cor</th>}
+                {visibleColumns.includes("role") && <th className="p-4 font-medium">Função</th>}
+                {visibleColumns.includes("vehicle") && <th className="p-4 font-medium">Veículo</th>}
+                {visibleColumns.includes("routes") && <th className="p-4 font-medium">Prefixos Habituais</th>}
+                {visibleColumns.includes("commission") && <th className="p-4 font-medium">Comissão</th>}
+                {visibleColumns.includes("target") && <th className="p-4 font-medium">Meta</th>}
+                {visibleColumns.includes("status") && <th className="p-4 font-medium">Status</th>}
+                {visibleColumns.includes("actions") && <th className="p-4 font-medium text-right">Ações</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-brand-blue/10 text-sm">
@@ -474,134 +553,150 @@ export default function LukeVendedoresPage() {
                 const userColor = user.color || getVendorColor(user.name);
                 return (
                   <tr key={user.id} className="hover:bg-brand-blue/5 transition group">
-                    <td className="p-4">
-                      <div className="flex items-center space-x-3">
-                        <div
-                          style={{ borderColor: userColor }}
-                          className="w-10 h-10 rounded-full bg-brand-black/60 border-2 flex items-center justify-center font-black text-white shrink-0 shadow-sm relative"
-                        >
-                          <span style={{ color: userColor }}>
-                            {user.name ? user.name.charAt(0).toUpperCase() : "V"}
-                          </span>
-                          <span
-                            style={{ backgroundColor: userColor }}
-                            className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border border-brand-graphite"
-                          />
-                        </div>
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <p className="text-brand-offwhite font-bold">{user.name}</p>
-                            <VendorBadge vendorName={user.name} color={userColor} size="xs" variant="chip" />
-                          </div>
-                          <p className="text-xs text-brand-offwhite/50">{user.email}</p>
-                          <div className="mt-0.5">
-                            {user.phone ? (
-                              <a
-                                href={getWhatsAppLink(user.phone)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center space-x-1 text-[11px] text-green-400 font-mono hover:underline font-bold"
-                              >
-                                <MessageCircle size={11} className="text-green-400" />
-                                <span>{formatPhoneBR(user.phone)}</span>
-                              </a>
-                            ) : (
-                              <span className="text-[11px] text-brand-offwhite/40 italic">Sem WhatsApp</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-
-                    <td className="p-4">
-                      <span
-                        className={`text-xs px-2.5 py-1 rounded-md font-semibold ${
-                          user.role === "ADMIN_VENDOR"
-                            ? "bg-brand-gold/20 text-brand-gold border border-brand-gold/30"
-                            : user.role === "ADMIN"
-                            ? "bg-purple-500/20 text-purple-300 border border-purple-500/30"
-                            : "bg-blue-500/20 text-blue-300 border border-blue-500/30"
-                        }`}
-                      >
-                        {user.role === "ADMIN_VENDOR"
-                          ? "Admin & Vendedor"
-                          : user.role === "ADMIN"
-                          ? "Administração"
-                          : user.role === "SUPERVISOR"
-                          ? "Supervisor"
-                          : "Vendedor"}
-                      </span>
-                    </td>
-
-                    <td className="p-4 text-xs text-brand-offwhite/80">
-                      <div className="flex items-center space-x-1.5">
-                        <Truck size={14} className="text-brand-gold/70 shrink-0" />
-                        <span>{user.vehicle}</span>
-                      </div>
-                      <span className="text-[11px] text-brand-offwhite/40 font-mono pl-5">
-                        {user.vehiclePlate}
-                      </span>
-                    </td>
-
-                    <td className="p-4">
-                      <div className="flex flex-wrap gap-1 max-w-[170px]">
-                        {user.assignedRoutes && user.assignedRoutes.length > 0 ? (
-                          user.assignedRoutes.slice(0, 4).map((r) => (
-                            <span
-                              key={r}
-                              className="px-1.5 py-0.5 bg-brand-black text-brand-offwhite/80 text-[10px] rounded border border-brand-blue/30 font-mono font-bold"
-                            >
-                              {r}
+                    {visibleColumns.includes("vendor") && (
+                      <td className="p-4">
+                        <div className="flex items-center space-x-3">
+                          <div
+                            style={{ borderColor: userColor }}
+                            className="w-10 h-10 rounded-full bg-brand-black/60 border-2 flex items-center justify-center font-black text-white shrink-0 shadow-sm relative"
+                          >
+                            <span style={{ color: userColor }}>
+                              {user.name ? user.name.charAt(0).toUpperCase() : "V"}
                             </span>
-                          ))
-                        ) : (
-                          <span className="text-[11px] text-brand-offwhite/40 italic">Via Agenda</span>
-                        )}
-                        {user.assignedRoutes && user.assignedRoutes.length > 4 && (
-                          <span className="text-[10px] text-brand-gold font-bold">
-                            +{user.assignedRoutes.length - 4}
-                          </span>
-                        )}
-                      </div>
-                    </td>
+                            <span
+                              style={{ backgroundColor: userColor }}
+                              className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border border-brand-graphite"
+                            />
+                          </div>
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <p className="text-brand-offwhite font-bold">{user.name}</p>
+                              <VendorBadge vendorName={user.name} color={userColor} size="xs" variant="chip" />
+                            </div>
+                            <p className="text-xs text-brand-offwhite/50">{user.email}</p>
+                            <div className="mt-0.5">
+                              {user.phone ? (
+                                <a
+                                  href={getWhatsAppLink(user.phone)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center space-x-1 text-[11px] text-green-400 font-mono hover:underline font-bold"
+                                >
+                                  <MessageCircle size={11} className="text-green-400" />
+                                  <span>{formatPhoneBR(user.phone)}</span>
+                                </a>
+                              ) : (
+                                <span className="text-[11px] text-brand-offwhite/40 italic">Sem WhatsApp</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                    )}
 
-                    <td className="p-4 font-mono font-bold text-emerald-400 text-xs">
-                      {user.commissionRate > 0 ? `${user.commissionRate.toFixed(1)}%` : "Fixo"}
-                    </td>
+                    {visibleColumns.includes("role") && (
+                      <td className="p-4">
+                        <span
+                          className={`text-xs px-2.5 py-1 rounded-md font-semibold ${
+                            user.role === "ADMIN_VENDOR"
+                              ? "bg-brand-gold/20 text-brand-gold border border-brand-gold/30"
+                              : user.role === "ADMIN"
+                              ? "bg-purple-500/20 text-purple-300 border border-purple-500/30"
+                              : "bg-blue-500/20 text-blue-300 border border-blue-500/30"
+                          }`}
+                        >
+                          {user.role === "ADMIN_VENDOR"
+                            ? "Admin & Vendedor"
+                            : user.role === "ADMIN"
+                            ? "Administração"
+                            : user.role === "SUPERVISOR"
+                            ? "Supervisor"
+                            : "Vendedor"}
+                        </span>
+                      </td>
+                    )}
 
-                    <td className="p-4 font-bold text-brand-offwhite text-xs font-mono">
-                      {user.monthlyTarget > 0 ? formatValue(user.monthlyTarget, "currency") : "---"}
-                    </td>
+                    {visibleColumns.includes("vehicle") && (
+                      <td className="p-4 text-xs text-brand-offwhite/80">
+                        <div className="flex items-center space-x-1.5">
+                          <Truck size={14} className="text-brand-gold/70 shrink-0" />
+                          <span>{user.vehicle}</span>
+                        </div>
+                        <span className="text-[11px] text-brand-offwhite/40 font-mono pl-5">
+                          {user.vehiclePlate}
+                        </span>
+                      </td>
+                    )}
 
-                    <td className="p-4">
-                      <button
-                        onClick={() => handleToggleStatus(user)}
-                        className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border transition ${
-                          user.status === "ACTIVE"
-                            ? "bg-green-500/10 text-green-400 border-green-500/20 hover:bg-green-500/20"
-                            : "bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/20"
-                        }`}
-                      >
-                        {user.status === "ACTIVE" ? "Ativo" : "Inativo"}
-                      </button>
-                    </td>
+                    {visibleColumns.includes("routes") && (
+                      <td className="p-4">
+                        <div className="flex flex-wrap gap-1 max-w-[170px]">
+                          {user.assignedRoutes && user.assignedRoutes.length > 0 ? (
+                            user.assignedRoutes.slice(0, 4).map((r) => (
+                              <span
+                                key={r}
+                                className="px-1.5 py-0.5 bg-brand-black text-brand-offwhite/80 text-[10px] rounded border border-brand-blue/30 font-mono font-bold"
+                              >
+                                {r}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-[11px] text-brand-offwhite/40 italic">Via Agenda</span>
+                          )}
+                          {user.assignedRoutes && user.assignedRoutes.length > 4 && (
+                            <span className="text-[10px] text-brand-gold font-bold">
+                              +{user.assignedRoutes.length - 4}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    )}
 
-                    <td className="p-4 text-right space-x-2 whitespace-nowrap">
-                      <button
-                        onClick={() => handleOpenModal(user)}
-                        title="Editar Vendedor"
-                        className="text-brand-offwhite/50 hover:text-brand-gold p-1.5 rounded-lg hover:bg-brand-blue/10 transition"
-                      >
-                        <Edit2 size={16} />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(user.id)}
-                        title="Excluir"
-                        className="text-brand-offwhite/50 hover:text-red-400 p-1.5 rounded-lg hover:bg-brand-blue/10 transition"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </td>
+                    {visibleColumns.includes("commission") && (
+                      <td className="p-4 font-mono font-bold text-emerald-400 text-xs">
+                        {user.commissionRate > 0 ? `${user.commissionRate.toFixed(1)}%` : "Fixo"}
+                      </td>
+                    )}
+
+                    {visibleColumns.includes("target") && (
+                      <td className="p-4 font-bold text-brand-offwhite text-xs font-mono">
+                        {user.monthlyTarget > 0 ? formatValue(user.monthlyTarget, "currency") : "---"}
+                      </td>
+                    )}
+
+                    {visibleColumns.includes("status") && (
+                      <td className="p-4">
+                        <button
+                          onClick={() => handleToggleStatus(user)}
+                          className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border transition ${
+                            user.status === "ACTIVE"
+                              ? "bg-green-500/10 text-green-400 border-green-500/20 hover:bg-green-500/20"
+                              : "bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/20"
+                          }`}
+                        >
+                          {user.status === "ACTIVE" ? "Ativo" : "Inativo"}
+                        </button>
+                      </td>
+                    )}
+
+                    {visibleColumns.includes("actions") && (
+                      <td className="p-4 text-right space-x-2 whitespace-nowrap">
+                        <button
+                          onClick={() => handleOpenModal(user)}
+                          title="Editar Vendedor"
+                          className="text-brand-offwhite/50 hover:text-brand-gold p-1.5 rounded-lg hover:bg-brand-blue/10 transition"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(user.id)}
+                          title="Excluir"
+                          className="text-brand-offwhite/50 hover:text-red-400 p-1.5 rounded-lg hover:bg-brand-blue/10 transition"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -722,9 +817,9 @@ export default function LukeVendedoresPage() {
                   <input
                     type="text"
                     value={formData.phone || ""}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, phone: maskPhone(e.target.value) })}
                     className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold"
-                    placeholder="Ex: 31988887777"
+                    placeholder="(31) 98888-7777"
                   />
                 </div>
 

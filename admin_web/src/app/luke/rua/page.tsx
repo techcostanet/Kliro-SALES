@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   MapPin,
   CheckCircle2,
@@ -15,14 +15,22 @@ import {
   DollarSign,
   Search,
   Filter,
+  Store,
+  Wifi,
+  Radio,
+  RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
+import { collection, onSnapshot, addDoc, doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 import initialProducts from "@/lib/products_catalog.json";
 import initialClients from "@/lib/clients_catalog.json";
 import { getVendorColor } from "@/lib/vendorColors";
-import { MASTER_ROUTES_CATALOG } from "@/lib/routesCatalog";
+import { MASTER_ROUTES_CATALOG, RouteMaster } from "@/lib/routesCatalog";
 import VendorBadge from "@/components/VendorBadge";
+import { logActivity } from "@/lib/activityLogger";
+import { formatCurrency, formatPhoneBR } from "@/lib/formatters";
 
 interface Product {
   id: string;
@@ -41,6 +49,7 @@ interface Client {
   name: string;
   document: string;
   address: string;
+  imageUrl?: string; // Foto do Estabelecimento para Reconhecimento em Campo (Requisito 11)
   status: "PENDING" | "COMPLETED" | "SKIPPED";
   lastSaleAmount?: number;
 }
@@ -48,85 +57,169 @@ interface Client {
 const AVAILABLE_VENDORS = ["Alisson", "Alexandre", "Lucas"];
 
 export default function LukeModoRuaPage() {
+  const tenantId = "tenant_luke_001";
+
   const [routeStatus, setRouteStatus] = useState<"OPEN" | "CLOSED">("OPEN");
   const [closedHash, setClosedHash] = useState<string | null>(null);
   const [productSearch, setProductSearch] = useState("");
 
   const [selectedVendor, setSelectedVendor] = useState("Alisson");
   const [selectedRouteCode, setSelectedRouteCode] = useState("R1");
+  const [isOnline, setIsOnline] = useState(true);
 
   const vendorColor = getVendorColor(selectedVendor);
-  const currentRoute = MASTER_ROUTES_CATALOG.find((r) => r.code === selectedRouteCode) || {
+
+  // ----------------------------------------------------
+  // CATÁLOGO DE PRODUTOS 100% ONLINE VIA FIRESTORE (REQUISITO 4)
+  // Permite que qualquer alteração de preço feita no ADM reflita instantaneamente na rua
+  // ----------------------------------------------------
+  const [productsCatalog, setProductsCatalog] = useState<Product[]>(initialProducts as Product[]);
+
+  useEffect(() => {
+    const unsub = onSnapshot(
+      collection(db, `tenants/${tenantId}/products`),
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const loaded: Product[] = [];
+          snapshot.forEach((d) => {
+            loaded.push({ id: d.id, ...d.data() } as Product);
+          });
+          setProductsCatalog(loaded);
+          setIsOnline(true);
+        }
+      },
+      (err) => {
+        console.warn("Modo Rua: Produtos offline/fallback:", err?.message);
+        setIsOnline(false);
+      }
+    );
+    return () => unsub();
+  }, []);
+
+  // ----------------------------------------------------
+  // ROTAS DINÂMICAS 100% ONLINE
+  // ----------------------------------------------------
+  const [routesList, setRoutesList] = useState<RouteMaster[]>(MASTER_ROUTES_CATALOG);
+
+  useEffect(() => {
+    const unsub = onSnapshot(
+      collection(db, `tenants/${tenantId}/routes`),
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const loaded: RouteMaster[] = [];
+          snapshot.forEach((d) => {
+            loaded.push({ id: d.id, ...d.data() } as RouteMaster);
+          });
+          setRoutesList(loaded);
+        }
+      },
+      (err) => {
+        console.warn("Rotas modo rua fallback:", err?.message);
+      }
+    );
+    return () => unsub();
+  }, []);
+
+  const currentRoute = routesList.find((r) => r.code === selectedRouteCode) || {
+    id: selectedRouteCode,
     code: selectedRouteCode,
     name: `Rota ${selectedRouteCode} - Centro & Região`,
+    prefix: "R" as const,
+    targetClientsCount: 24,
+    estimatedRevenue: 4800,
+    region: "Centro",
+    active: true,
   };
 
-  const productsCatalog: Product[] = initialProducts as Product[];
+  // ----------------------------------------------------
+  // CLIENTES DA ROTA ATUAL 100% ONLINE (REQUISITO 4 E 11)
+  // ----------------------------------------------------
+  const [clients, setClients] = useState<Client[]>([]);
 
-  // Monta lista de clientes da rota atual, priorizando os salões de teste
-  const initialRouteClients = useMemo<Client[]>(() => {
-    const routeMatching = (initialClients as any[])
-      .filter((c) => c.routeId === selectedRouteCode)
-      .slice(0, 10)
-      .map((c, idx) => ({
-        id: c.id,
-        order: idx + 1,
-        name: c.name,
-        document: c.document || "00.000.000/0001-00",
-        address: c.address || `${c.street || "Rua Principal"}, ${c.number || "100"} - ${c.neighborhood || "Centro"}`,
-        status: idx === 0 ? ("PENDING" as const) : ("PENDING" as const),
-        lastSaleAmount: 0,
-      }));
+  useEffect(() => {
+    const unsub = onSnapshot(
+      collection(db, `tenants/${tenantId}/clients`),
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const loadedClients: any[] = [];
+          snapshot.forEach((d) => {
+            loadedClients.push({ id: d.id, ...d.data() });
+          });
 
-    if (routeMatching.length > 0) {
-      return routeMatching;
-    }
+          const matching = loadedClients
+            .filter((c) => c.routeId === selectedRouteCode)
+            .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
+            .map((c, idx) => ({
+              id: c.id,
+              order: Number(c.order || idx + 1),
+              name: c.name,
+              document: c.document || "00.000.000/0001-00",
+              address: c.address || `${c.street || "Rua Principal"}, ${c.number || "100"} - ${c.neighborhood || "Centro"}`,
+              imageUrl: c.imageUrl || "", // Foto da fachada
+              status: "PENDING" as const,
+              lastSaleAmount: 0,
+            }));
 
-    // Fallback garantido para demonstração
-    return [
-      {
-        id: "CLI-TEST-001",
-        order: 1,
-        name: "Barbearia Dom Lucas Barber Club & Spa (TESTE VIP)",
-        document: "34.128.992/0001-45",
-        address: "Avenida Afonso Pena, 2850 - Savassi, Belo Horizonte - MG",
-        status: "PENDING",
-        lastSaleAmount: 0,
+          if (matching.length > 0) {
+            setClients(matching);
+            return;
+          }
+        }
+
+        // Fallback local se o banco estiver vazio
+        const fallback = (initialClients as any[])
+          .filter((c) => c.routeId === selectedRouteCode)
+          .slice(0, 10)
+          .map((c, idx) => ({
+            id: c.id,
+            order: idx + 1,
+            name: c.name,
+            document: c.document || "00.000.000/0001-00",
+            address: c.address || `${c.street || "Rua Principal"}, ${c.number || "100"} - ${c.neighborhood || "Centro"}`,
+            imageUrl: c.imageUrl || "",
+            status: "PENDING" as const,
+            lastSaleAmount: 0,
+          }));
+
+        setClients(
+          fallback.length > 0
+            ? fallback
+            : [
+                {
+                  id: "CLI-TEST-001",
+                  order: 1,
+                  name: "Barbearia Dom Lucas Barber Club & Spa (TESTE VIP)",
+                  document: "34.128.992/0001-45",
+                  address: "Avenida Afonso Pena, 2850 - Savassi, Belo Horizonte - MG",
+                  status: "PENDING",
+                  lastSaleAmount: 0,
+                },
+                {
+                  id: "CLI-TEST-002",
+                  order: 2,
+                  name: "Studio Beleza Real & Barbearia Vip (TESTE SHOWROOM)",
+                  document: "28.945.112/0001-88",
+                  address: "Avenida Fleming, 840 - Pampulha, Belo Horizonte - MG",
+                  status: "PENDING",
+                  lastSaleAmount: 0,
+                },
+              ]
+        );
       },
-      {
-        id: "CLI-TEST-002",
-        order: 2,
-        name: "Studio Beleza Real & Barbearia Vip (TESTE SHOWROOM)",
-        document: "28.945.112/0001-88",
-        address: "Avenida Fleming, 840 - Pampulha, Belo Horizonte - MG",
-        status: "PENDING",
-        lastSaleAmount: 0,
-      },
-    ];
+      (err) => {
+        console.warn("Clientes modo rua fallback:", err?.message);
+      }
+    );
+    return () => unsub();
   }, [selectedRouteCode]);
-
-  const [clients, setClients] = useState<Client[]>(initialRouteClients);
 
   // Sincroniza quando muda a rota
   const handleRouteChange = (routeCode: string) => {
     setSelectedRouteCode(routeCode);
-    const newRoute = MASTER_ROUTES_CATALOG.find((r) => r.code === routeCode);
+    const newRoute = routesList.find((r) => r.code === routeCode);
     if (newRoute?.defaultVendorName) {
       setSelectedVendor(newRoute.defaultVendorName);
     }
-    const matching = (initialClients as any[])
-      .filter((c) => c.routeId === routeCode)
-      .slice(0, 10)
-      .map((c, idx) => ({
-        id: c.id,
-        order: idx + 1,
-        name: c.name,
-        document: c.document || "00.000.000/0001-00",
-        address: c.address || `${c.street || "Rua Principal"}, ${c.number || "100"} - ${c.neighborhood || "Centro"}`,
-        status: "PENDING" as const,
-        lastSaleAmount: 0,
-      }));
-    setClients(matching.length > 0 ? matching : initialRouteClients);
   };
 
   const [activeClient, setActiveClient] = useState<Client | null>(null);
@@ -163,20 +256,50 @@ export default function LukeModoRuaPage() {
     });
   };
 
-  const handleFinalizeSale = () => {
+  // Finalização de Venda Online com Auditoria
+  const handleFinalizeSale = async () => {
     if (!activeClient || currentCartTotal === 0) return;
+
+    const saleAmount = currentCartTotal;
+    const clientRef = activeClient;
 
     setClients((prev) =>
       prev.map((c) =>
-        c.id === activeClient.id
-          ? { ...c, status: "COMPLETED", lastSaleAmount: currentCartTotal }
+        c.id === clientRef.id
+          ? { ...c, status: "COMPLETED", lastSaleAmount: saleAmount }
           : c
       )
     );
     setActiveClient(null);
+
+    // Grava transação online no Firestore (Anti-Fraude)
+    try {
+      await addDoc(collection(db, `tenants/${tenantId}/transactions`), {
+        clientId: clientRef.id,
+        clientName: clientRef.name,
+        routeCode: selectedRouteCode,
+        vendorName: selectedVendor,
+        amount: saleAmount,
+        paymentMethod,
+        items: cart,
+        timestamp: new Date().toISOString(),
+        createdAt: serverTimestamp(),
+      });
+
+      await logActivity(tenantId, {
+        userName: selectedVendor,
+        userEmail: `${selectedVendor.toLowerCase()}@luke.com`,
+        action: "VENDA_REALIZADA",
+        entity: "TRANSACAO",
+        entityId: clientRef.id,
+        details: `Venda de ${formatCurrency(saleAmount)} realizada no cliente "${clientRef.name}" (Rota ${selectedRouteCode}) via ${paymentMethod}.`,
+      });
+    } catch (e) {
+      console.warn("Gravação de venda offline:", e);
+    }
   };
 
-  const handleExecuteRouteClose = () => {
+  const handleExecuteRouteClose = async () => {
     const timestamp = Date.now();
     const hash = `KLRO-LUKE-${timestamp.toString(16).toUpperCase()}-${Math.floor(
       Math.random() * 10000
@@ -184,6 +307,16 @@ export default function LukeModoRuaPage() {
     setClosedHash(hash);
     setRouteStatus("CLOSED");
     setIsClosingModalOpen(false);
+
+    try {
+      await logActivity(tenantId, {
+        userName: selectedVendor,
+        userEmail: `${selectedVendor.toLowerCase()}@luke.com`,
+        action: "ROTA_FINALIZADA",
+        entity: "EXECUCAO_ROTA",
+        details: `Fechou e auditou a rota ${selectedRouteCode} com ${completedCount} atendimentos e ${formatCurrency(totalSales)} em vendas. Hash: ${hash}`,
+      });
+    } catch (e) {}
   };
 
   return (
@@ -204,7 +337,7 @@ export default function LukeModoRuaPage() {
               <div className="flex items-center space-x-1.5">
                 <span style={{ backgroundColor: vendorColor }} className="w-2 h-2 rounded-full" />
                 <h1 className="text-xs uppercase tracking-widest font-extrabold text-brand-gold">
-                  LUKE BRASIL • MODO RUA
+                  LUKE BRASIL &bull; MODO RUA
                 </h1>
               </div>
               <div className="flex items-center space-x-2 mt-0.5">
@@ -224,7 +357,13 @@ export default function LukeModoRuaPage() {
             </div>
           </div>
 
-          <div>
+          <div className="flex items-center space-x-2">
+            {/* Indicador de Modo Online em Tempo Real (Requisito 4) */}
+            <div className="hidden sm:flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Online em Tempo Real</span>
+            </div>
+
             {routeStatus === "OPEN" ? (
               <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-green-500/15 text-green-400 border border-green-500/30">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-ping mr-1.5" />
@@ -242,20 +381,32 @@ export default function LukeModoRuaPage() {
 
       {/* Conteúdo Mobile */}
       <main className="max-w-xl mx-auto px-4 pt-4 space-y-4">
+        {/* Banner Online Informativo (Requisito 4) */}
+        <div className="flex items-center justify-between p-2.5 bg-brand-blue/15 border border-brand-blue/30 rounded-xl text-xs text-brand-offwhite">
+          <div className="flex items-center space-x-2">
+            <Radio size={14} className="text-emerald-400 animate-pulse" />
+            <span className="text-[11px] font-bold">
+              Preços atualizados em tempo real via nuvem LUKE
+            </span>
+          </div>
+          <span className="text-[10px] font-mono text-brand-gold">
+            {productsCatalog.length} produtos
+          </span>
+        </div>
+
         {/* Seletor de Rota */}
         <div className="flex items-center space-x-2 bg-brand-graphite p-2.5 rounded-xl border border-brand-blue/30 text-xs">
           <span className="text-brand-offwhite/60 font-semibold">Selecionar Rota:</span>
           <select
             value={selectedRouteCode}
             onChange={(e) => handleRouteChange(e.target.value)}
-            className="bg-brand-black text-brand-gold font-bold px-3 py-1.5 rounded-lg border border-brand-blue/40 focus:outline-none"
+            className="bg-brand-black text-brand-gold font-bold px-3 py-1.5 rounded-lg border border-brand-blue/40 focus:outline-none flex-1 truncate"
           >
-            <option value="R1">Rota R1 - Centro (Barbearia Dom Lucas VIP)</option>
-            <option value="F2">Rota F2 - Pampulha (Studio Beleza Real Showroom)</option>
-            <option value="R2">Rota R2 - Zona Sul</option>
-            <option value="R3">Rota R3 - Barreiro & Contorno</option>
-            <option value="F1">Rota F1 - Leste & Savassi</option>
-            <option value="F10">Rota F10 - Lagoa Santa</option>
+            {routesList.map((r) => (
+              <option key={r.code} value={r.code}>
+                {r.code} - {r.name}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -278,8 +429,8 @@ export default function LukeModoRuaPage() {
             </div>
             <div className="text-right">
               <p className="text-xs text-brand-offwhite/60 font-medium">Total Vendido</p>
-              <p className="text-xl font-extrabold text-brand-gold">
-                R$ {totalSales.toFixed(2).replace(".", ",")}
+              <p className="text-xl font-extrabold text-brand-gold font-mono">
+                {formatCurrency(totalSales)}
               </p>
             </div>
           </div>
@@ -322,7 +473,7 @@ export default function LukeModoRuaPage() {
           )}
         </div>
 
-        {/* Lista de Clientes */}
+        {/* Lista de Clientes com Reconhecimento Visual da Fachada (Requisito 11) */}
         <div className="space-y-2.5">
           <div className="flex justify-between items-center px-1">
             <h3 className="text-sm font-bold uppercase tracking-wider text-brand-offwhite/70">
@@ -338,34 +489,42 @@ export default function LukeModoRuaPage() {
               <div
                 key={client.id}
                 onClick={() => handleOpenClientSale(client)}
-                className={`p-4 rounded-xl border transition cursor-pointer flex items-center justify-between ${
+                className={`p-3.5 rounded-xl border transition cursor-pointer flex items-center justify-between ${
                   isCompleted
                     ? "bg-brand-graphite/40 border-green-500/20 opacity-90"
                     : "bg-brand-graphite border-brand-blue/30 hover:border-brand-gold shadow-md"
                 }`}
               >
-                <div className="flex items-start space-x-3">
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 ${
-                      isCompleted
-                        ? "bg-green-500/20 text-green-400 border border-green-500/30"
-                        : "bg-brand-blue/30 text-brand-gold border border-brand-gold/30"
-                    }`}
-                  >
-                    {isCompleted ? <CheckCircle2 size={16} /> : client.order}
+                <div className="flex items-center space-x-3">
+                  {/* Foto da Fachada para Reconhecimento Visual em Campo (Requisito 11) */}
+                  <div className="w-12 h-12 rounded-xl bg-brand-black/60 border border-brand-gold/30 flex items-center justify-center shrink-0 overflow-hidden shadow">
+                    {client.imageUrl ? (
+                      <img
+                        src={client.imageUrl}
+                        alt={client.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <Store size={22} className="text-brand-gold/70" />
+                    )}
                   </div>
 
                   <div>
-                    <h4 className="font-bold text-brand-offwhite text-sm leading-snug">
-                      {client.name}
-                    </h4>
-                    <p className="text-xs text-brand-offwhite/50 flex items-center mt-0.5">
-                      <MapPin size={12} className="mr-1 text-brand-gold shrink-0" />
-                      <span className="truncate max-w-[210px]">{client.address}</span>
+                    <div className="flex items-center space-x-1.5">
+                      <span className="px-1.5 py-0.2 bg-brand-blue/30 text-brand-gold rounded text-[10px] font-mono font-bold">
+                        #{client.order}
+                      </span>
+                      <h4 className="font-bold text-brand-offwhite text-xs sm:text-sm leading-snug">
+                        {client.name}
+                      </h4>
+                    </div>
+                    <p className="text-[11px] text-brand-offwhite/50 flex items-center mt-0.5">
+                      <MapPin size={11} className="mr-1 text-brand-gold shrink-0" />
+                      <span className="truncate max-w-[190px]">{client.address}</span>
                     </p>
                     {isCompleted && (
-                      <p className="text-xs font-bold text-green-400 mt-1">
-                        ✓ Venda: R$ {client.lastSaleAmount?.toFixed(2).replace(".", ",")}
+                      <p className="text-[11px] font-bold text-green-400 mt-0.5">
+                        ✓ Venda: {formatCurrency(client.lastSaleAmount || 0)}
                       </p>
                     )}
                   </div>
@@ -385,18 +544,29 @@ export default function LukeModoRuaPage() {
         </div>
       </main>
 
-      {/* MODAL DE ATENDIMENTO */}
+      {/* MODAL DE ATENDIMENTO E VENDA ONLINE */}
       {activeClient && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-brand-graphite w-full max-w-lg rounded-t-3xl sm:rounded-2xl border border-brand-blue/40 p-5 space-y-5 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-start border-b border-brand-blue/20 pb-3">
-              <div>
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-gold">
-                  LUKE Brasil • Pedido
-                </span>
-                <h3 className="text-lg font-bold text-brand-offwhite">{activeClient.name}</h3>
-                <p className="text-xs text-brand-offwhite/50">{activeClient.document}</p>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-brand-graphite border border-brand-blue/40 w-full max-w-lg rounded-t-3xl sm:rounded-2xl p-5 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            {/* Header do Cliente com Foto */}
+            <div className="flex items-start justify-between pb-3 border-b border-brand-blue/30">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 rounded-xl bg-brand-black/60 border border-brand-gold/30 flex items-center justify-center overflow-hidden shrink-0">
+                  {activeClient.imageUrl ? (
+                    <img src={activeClient.imageUrl} alt={activeClient.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <Store size={22} className="text-brand-gold/70" />
+                  )}
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-brand-blue/30 text-brand-gold font-mono">
+                    VISITA #{activeClient.order}
+                  </span>
+                  <h3 className="text-sm font-bold text-brand-offwhite mt-0.5">{activeClient.name}</h3>
+                  <p className="text-[11px] text-brand-offwhite/50">{activeClient.address}</p>
+                </div>
               </div>
+
               <button
                 onClick={() => setActiveClient(null)}
                 className="text-brand-offwhite/50 hover:text-brand-offwhite text-sm p-1 cursor-pointer"
@@ -411,6 +581,9 @@ export default function LukeModoRuaPage() {
                 <h4 className="text-xs font-bold uppercase tracking-wider text-brand-offwhite/70">
                   Produtos do Pedido ({Object.values(cart).reduce((a, b) => a + b, 0)} itens)
                 </h4>
+                <span className="text-[10px] text-emerald-400 font-mono font-bold">
+                  ● Preços Ao Vivo
+                </span>
               </div>
 
               {/* Busca rápida de produto no atendimento */}
@@ -420,12 +593,12 @@ export default function LukeModoRuaPage() {
                   type="text"
                   value={productSearch}
                   onChange={(e) => setProductSearch(e.target.value)}
-                  placeholder="Filtrar entre os produtos LUKE..."
+                  placeholder="Filtrar produtos LUKE..."
                   className="w-full pl-8 pr-3 py-1.5 bg-brand-black border border-brand-blue/40 rounded-lg text-xs text-brand-offwhite placeholder-brand-offwhite/30 focus:outline-none focus:border-brand-gold"
                 />
               </div>
 
-              <div className="space-y-2 max-h-64 overflow-y-auto pr-1 scrollbar-thin">
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
                 {productsCatalog
                   .filter((p) =>
                     p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
@@ -457,8 +630,8 @@ export default function LukeModoRuaPage() {
                               </span>
                               <p className="text-xs font-semibold text-brand-offwhite">{product.name}</p>
                             </div>
-                            <p className="text-[11px] text-brand-gold font-bold mt-0.5">
-                              R$ {product.price.toFixed(2).replace(".", ",")}
+                            <p className="text-[11px] text-brand-gold font-bold mt-0.5 font-mono">
+                              {formatCurrency(product.price)}
                             </p>
                           </div>
                         </div>
@@ -497,110 +670,111 @@ export default function LukeModoRuaPage() {
                 <button
                   type="button"
                   onClick={() => setPaymentMethod("PIX")}
-                  className={`py-2.5 rounded-xl text-xs font-bold flex flex-col items-center justify-center space-y-1 border transition cursor-pointer ${
+                  className={`py-2 rounded-xl text-xs font-bold flex flex-col items-center justify-center space-y-1 border transition cursor-pointer ${
                     paymentMethod === "PIX"
                       ? "bg-teal-500/20 text-teal-300 border-teal-400"
                       : "bg-brand-black/50 text-brand-offwhite/60 border-brand-blue/30"
                   }`}
                 >
-                  <QrCode size={18} />
+                  <QrCode size={16} />
                   <span>Pix</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setPaymentMethod("CASH")}
-                  className={`py-2.5 rounded-xl text-xs font-bold flex flex-col items-center justify-center space-y-1 border transition cursor-pointer ${
+                  className={`py-2 rounded-xl text-xs font-bold flex flex-col items-center justify-center space-y-1 border transition cursor-pointer ${
                     paymentMethod === "CASH"
                       ? "bg-amber-500/20 text-amber-300 border-amber-400"
                       : "bg-brand-black/50 text-brand-offwhite/60 border-brand-blue/30"
                   }`}
                 >
-                  <Banknote size={18} />
+                  <Banknote size={16} />
                   <span>Dinheiro</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setPaymentMethod("TICKET")}
-                  className={`py-2.5 rounded-xl text-xs font-bold flex flex-col items-center justify-center space-y-1 border transition cursor-pointer ${
+                  className={`py-2 rounded-xl text-xs font-bold flex flex-col items-center justify-center space-y-1 border transition cursor-pointer ${
                     paymentMethod === "TICKET"
-                      ? "bg-purple-500/20 text-purple-300 border-purple-400"
+                      ? "bg-blue-500/20 text-blue-300 border-blue-400"
                       : "bg-brand-black/50 text-brand-offwhite/60 border-brand-blue/30"
                   }`}
                 >
-                  <DollarSign size={18} />
-                  <span>A Prazo (P.A.)</span>
+                  <DollarSign size={16} />
+                  <span>Boleto / P.A.</span>
                 </button>
               </div>
             </div>
 
-            {/* Total e Concluir */}
-            <div className="pt-3 border-t border-brand-blue/30 space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-semibold text-brand-offwhite/70">Total do Pedido</span>
-                <span className="text-2xl font-extrabold text-brand-gold">
-                  R$ {currentCartTotal.toFixed(2).replace(".", ",")}
-                </span>
+            {/* Total e Ação */}
+            <div className="pt-3 border-t border-brand-blue/30 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] text-brand-offwhite/60 uppercase font-semibold">Total do Pedido</p>
+                <p className="text-xl font-extrabold text-brand-gold font-mono">
+                  {formatCurrency(currentCartTotal)}
+                </p>
               </div>
 
               <button
+                type="button"
                 onClick={handleFinalizeSale}
                 disabled={currentCartTotal === 0}
-                className="w-full bg-brand-gold text-brand-black py-3 rounded-xl font-extrabold hover:bg-yellow-500 disabled:opacity-40 transition shadow-lg text-sm cursor-pointer"
+                className="px-6 py-2.5 bg-brand-gold text-brand-black rounded-xl font-black text-xs hover:bg-yellow-500 transition shadow-lg disabled:opacity-50 cursor-pointer"
               >
-                Concluir Venda e Registrar
+                Confirmar Venda
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL FECHAMENTO ANTI-FRAUDE */}
+      {/* MODAL DE FECHAMENTO DE ROTA */}
       {isClosingModalOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-brand-graphite w-full max-w-md rounded-2xl border border-brand-gold/40 p-6 space-y-5 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
+          <div className="bg-brand-graphite border border-brand-blue/50 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
             <div className="text-center space-y-2">
-              <div className="w-12 h-12 rounded-full bg-brand-gold/15 text-brand-gold flex items-center justify-center mx-auto border border-brand-gold/30">
-                <Lock size={24} />
+              <div className="w-12 h-12 rounded-full bg-brand-gold/20 text-brand-gold flex items-center justify-center mx-auto border border-brand-gold/40">
+                <Lock size={22} />
               </div>
-              <h3 className="text-xl font-bold text-brand-offwhite">
-                Fechamento Anti-Fraude (LUKE Brasil)
+              <h3 className="text-base font-bold text-brand-offwhite">
+                Fechar e Auditar Rota?
               </h3>
-              <p className="text-xs text-brand-offwhite/60">
-                Ao fechar a rota, todas as transações serão consolidadas e bloqueadas contra edição no Firestore.
+              <p className="text-xs text-brand-offwhite/60 leading-relaxed">
+                Ao fechar a rota, os dados de vendas e estoque serão sincronizados na nuvem e o ciclo desta rota será bloqueado contra alterações.
               </p>
             </div>
 
-            <div className="bg-brand-black/70 p-4 rounded-xl space-y-2 border border-brand-blue/30 text-sm">
+            <div className="p-3 bg-brand-black/60 rounded-xl border border-brand-blue/30 text-xs space-y-1">
               <div className="flex justify-between">
-                <span className="text-brand-offwhite/60">Total Faturado:</span>
-                <span className="font-bold text-brand-gold">
-                  R$ {totalSales.toFixed(2).replace(".", ",")}
-                </span>
+                <span className="text-brand-offwhite/60">Vendedor:</span>
+                <span className="font-bold text-brand-offwhite">{selectedVendor}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-brand-offwhite/60">Visitas Concluídas:</span>
-                <span className="font-bold text-brand-offwhite">
-                  {completedCount} de {clients.length}
-                </span>
+                <span className="text-brand-offwhite/60">Atendimentos:</span>
+                <span className="font-bold text-brand-offwhite">{completedCount} concluídos</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-brand-offwhite/60">Total Vendido:</span>
+                <span className="font-bold text-brand-gold font-mono">{formatCurrency(totalSales)}</span>
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2 pt-2">
               <button
-                onClick={handleExecuteRouteClose}
-                className="w-full bg-brand-gold text-brand-black py-3 rounded-xl font-extrabold hover:bg-yellow-500 transition shadow-lg text-sm flex items-center justify-center space-x-2 cursor-pointer"
-              >
-                <ShieldCheck size={18} />
-                <span>Confirmar e Travar Rota</span>
-              </button>
-
-              <button
+                type="button"
                 onClick={() => setIsClosingModalOpen(false)}
-                className="w-full py-2.5 text-xs text-brand-offwhite/60 hover:text-brand-offwhite transition cursor-pointer"
+                className="w-full py-2 bg-brand-black text-brand-offwhite/70 hover:text-brand-offwhite border border-brand-blue/30 rounded-xl text-xs font-bold transition"
               >
-                Cancelar e Continuar Vendendo
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteRouteClose}
+                className="w-full py-2 bg-brand-gold text-brand-black rounded-xl text-xs font-black hover:bg-yellow-500 transition shadow-lg"
+              >
+                Sim, Fechar Rota
               </button>
             </div>
           </div>

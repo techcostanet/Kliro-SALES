@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Store,
   Plus,
@@ -19,12 +19,26 @@ import {
   UserPlus,
   Check,
   AlertCircle,
+  Camera,
+  Upload,
+  Sparkles,
+  RefreshCw,
 } from "lucide-react";
 import { collection, getDocs, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import initialClients from "@/lib/clients_catalog.json";
 import { usePrivacy } from "@/lib/privacyContext";
-import { formatCurrency, formatPhoneBR, getWhatsAppLink } from "@/lib/formatters";
+import {
+  formatCurrency,
+  formatPhoneBR,
+  getWhatsAppLink,
+  maskPhone,
+  formatCurrencyInput,
+  fetchAddressByCep,
+} from "@/lib/formatters";
+import ToastFeedback, { ToastMessage } from "@/components/ToastFeedback";
+import ColumnOrganizer, { ColumnDefinition } from "@/components/ColumnOrganizer";
+import { logActivity } from "@/lib/activityLogger";
 
 export interface BuyerContact {
   name: string;
@@ -38,16 +52,14 @@ export interface ClientItem {
   order: number;
   code: string;
   name: string;
-  imageUrl?: string;
-  // Até 5 Compradores com WhatsApp
+  imageUrl?: string; // Foto do Estabelecimento (Requisito 11)
   buyers: BuyerContact[];
-  buyer?: string; // Legado / Principal
+  buyer?: string;
   conferenceInfo: string;
-  acceptsPA: boolean; // Aceita Prazo Aberto (P.A.)
+  acceptsPA: boolean;
   status: "ACTIVE" | "INACTIVE";
   phone: string;
   document: string;
-  // Endereço Completo Estruturado
   cep?: string;
   street?: string;
   number?: string;
@@ -56,37 +68,66 @@ export interface ClientItem {
   city?: string;
   state?: string;
   reference?: string;
-  address: string; // Formatado para exibição rápida
-  creditLimit: number; // Limite de Compras Mensal (R$)
+  address: string;
+  creditLimit: number;
   businessType: string;
-  notes?: string;
+  notes?: string; // Observação do Cliente (Requisito 10)
 }
 
-const ROUTES = [
+const DEFAULT_ROUTES = [
   "Todas",
   "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10", "R11", "R12",
   "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
-  "RESERVA 1", "RESERVA 2", "RESERVA 3", "Representante"
+  "G1", "G2", "G3", "G4", "Y3", "Y4", "CENTRO", "RESERVA 1", "RESERVA 2", "Representante"
 ];
 
-const COMMERCIAL_CONDITIONS = [
+const DEFAULT_CONDITIONS = [
   "Todas",
+  "prazo 30 dias",
   "prazo + consignado",
   "consignado + a vista",
-  "prazo 30 dias",
-  "Compra Lamina",
-  "Intermitente",
-  "Prazo",
+  "Prazo 15 Dias",
+  "Prazo 14/28 Dias",
   "Consignado",
-  "A Vista"
+  "A Vista",
+  "Compra Lamina",
+  "Intermitente"
+];
+
+// Colunas Configuráveis para a Tabela (Requisito 15)
+const CLIENT_COLUMNS: ColumnDefinition[] = [
+  { key: "client", label: "Cliente / Fachada", defaultVisible: true },
+  { key: "buyers", label: "Compradores & WhatsApp", defaultVisible: true },
+  { key: "route", label: "Rota & Ordem", defaultVisible: true },
+  { key: "address", label: "Endereço & Cidade", defaultVisible: true },
+  { key: "condition", label: "Condição Comercial & P.A.", defaultVisible: true },
+  { key: "limit", label: "Limite Mensal", defaultVisible: true },
+  { key: "status", label: "Status", defaultVisible: true },
+  { key: "actions", label: "Ações", defaultVisible: true, alwaysVisible: true },
 ];
 
 export default function LukeClientesPage() {
   const { hideValues, togglePrivacy, formatValue } = usePrivacy();
+  const tenantId = "tenant_luke_001";
+
+  // Toast Feedback State (Requisito 13)
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+
+  // Column Organizer State (Requisito 15)
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("kliro_cols_clientes");
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return CLIENT_COLUMNS.map((c) => c.key);
+  });
 
   const [clients, setClients] = useState<ClientItem[]>(() => {
-    return (initialClients as any[]).map((c) => ({
+    return (initialClients as any[]).map((c, idx) => ({
       ...c,
+      order: Number(c.order || idx + 1),
       acceptsPA: c.acceptsPA !== undefined ? c.acceptsPA : (c.conferenceInfo?.toLowerCase().includes("prazo") ?? true),
       buyers: c.buyers && c.buyers.length > 0 ? c.buyers : [{ name: c.buyer || "Proprietário", phone: c.phone || "" }],
       cep: c.cep || "30140-000",
@@ -97,6 +138,7 @@ export default function LukeClientesPage() {
       city: c.city || "Belo Horizonte",
       state: c.state || "MG",
       reference: c.reference || "",
+      notes: c.notes || "",
     }));
   });
 
@@ -106,14 +148,22 @@ export default function LukeClientesPage() {
   const [selectedCondition, setSelectedCondition] = useState("Todas");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
 
+  // Rotas Dinâmicas carregadas do Firestore ou Fallback
+  const [availableRoutes, setAvailableRoutes] = useState<string[]>(DEFAULT_ROUTES);
+  // Condições Dinâmicas carregadas do Firestore ou Fallback
+  const [availableConditions, setAvailableConditions] = useState<string[]>(DEFAULT_CONDITIONS);
+
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<ClientItem | null>(null);
 
+  // Form State
   const [formData, setFormData] = useState<Partial<ClientItem>>({
     routeId: "R1",
-    code: "",
+    order: 1,
+    code: "R1C01",
     name: "",
+    imageUrl: "",
     buyers: [{ name: "", phone: "", role: "Proprietário" }],
     conferenceInfo: "prazo 30 dias",
     acceptsPA: true,
@@ -128,18 +178,56 @@ export default function LukeClientesPage() {
     city: "Belo Horizonte",
     state: "MG",
     reference: "",
-    address: "",
     creditLimit: 2000,
     businessType: "Comércio / Distribuição",
     notes: "",
   });
 
-  const tenantId = "tenant_luke_001";
+  // Estado de Máscara Monetária do Limite de Compra (Requisito 8)
+  const [creditLimitDisplay, setCreditLimitDisplay] = useState("R$ 2.000,00");
+  // Estado de Busca Automática do CEP (Requisito 9)
+  const [isSearchingCep, setIsSearchingCep] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Carrega do Firestore
+  // Helper: Gera o código automático do cliente com base na rota e ordem (Requisito 7)
+  const generateClientCode = (routeId: string, order: number | string): string => {
+    const cleanRoute = (routeId || "R1").trim().toUpperCase();
+    const numOrder = Number(order) || 1;
+    return `${cleanRoute}C${String(numOrder).padStart(2, "0")}`;
+  };
+
+  // Carrega Clientes, Rotas e Condições do Firestore
   const fetchClientsFromFirestore = async () => {
     try {
       setLoadingFirestore(true);
+
+      // Carregar Rotas Ativas
+      try {
+        const routesSnap = await getDocs(collection(db, `tenants/${tenantId}/routes`));
+        if (!routesSnap.empty) {
+          const rCodes: string[] = ["Todas"];
+          routesSnap.forEach((d) => {
+            const data = d.data();
+            if (data.code && data.active !== false) rCodes.push(data.code);
+          });
+          setAvailableRoutes(rCodes);
+        }
+      } catch (e) {}
+
+      // Carregar Condições de Pagamento Ativas
+      try {
+        const ptSnap = await getDocs(collection(db, `tenants/${tenantId}/payment_terms`));
+        if (!ptSnap.empty) {
+          const terms: string[] = ["Todas"];
+          ptSnap.forEach((d) => {
+            const data = d.data();
+            if (data.name && data.active !== false) terms.push(data.name);
+          });
+          setAvailableConditions(terms);
+        }
+      } catch (e) {}
+
+      // Carregar Clientes
       const snapshot = await getDocs(collection(db, `tenants/${tenantId}/clients`));
       if (!snapshot.empty) {
         const loaded: ClientItem[] = [];
@@ -149,13 +237,14 @@ export default function LukeClientesPage() {
             id: docSnap.id,
             routeId: d.routeId || "R1",
             order: Number(d.order || 0),
-            code: d.code || "",
+            code: d.code || generateClientCode(d.routeId || "R1", d.order || 1),
             name: d.name || "Cliente",
+            imageUrl: d.imageUrl || "",
             buyers: d.buyers && Array.isArray(d.buyers) && d.buyers.length > 0
               ? d.buyers
               : [{ name: d.buyer || "Proprietário", phone: d.phone || "" }],
             buyer: d.buyer || "",
-            conferenceInfo: d.conferenceInfo || "Prazo",
+            conferenceInfo: d.conferenceInfo || "Prazo 30 dias",
             acceptsPA: d.acceptsPA !== undefined ? d.acceptsPA : (d.conferenceInfo?.toLowerCase().includes("prazo") ?? true),
             status: d.status || "ACTIVE",
             phone: d.phone || "",
@@ -174,27 +263,6 @@ export default function LukeClientesPage() {
             notes: d.notes || "",
           });
         });
-        const testItems = (initialClients as any[])
-          .filter((c) => c.id.startsWith("CLI-TEST-"))
-          .map((c) => ({
-            ...c,
-            acceptsPA: c.acceptsPA ?? true,
-            buyers: c.buyers || [],
-          }));
-
-        for (const tItem of testItems) {
-          if (!loaded.some((l) => l.id === tItem.id)) {
-            loaded.unshift(tItem);
-            try {
-              setDoc(doc(db, `tenants/${tenantId}/clients`, tItem.id), {
-                ...tItem,
-                createdAt: new Date(),
-              });
-            } catch (e) {
-              // ignore
-            }
-          }
-        }
         setClients(loaded);
       }
     } catch (err: any) {
@@ -238,23 +306,35 @@ export default function LukeClientesPage() {
     });
   }, [clients, searchTerm, selectedRoute, selectedCondition, statusFilter]);
 
-  // Modal Handlers
+  // Modal Open Handlers
   const handleOpenModal = (cli?: ClientItem) => {
     if (cli) {
       setEditingClient(cli);
+      const limitVal = Number(cli.creditLimit || 2000);
+      setCreditLimitDisplay(formatCurrency(limitVal));
       setFormData({
         ...cli,
+        code: cli.code || generateClientCode(cli.routeId || "R1", cli.order || 1),
         buyers: cli.buyers && cli.buyers.length > 0 ? cli.buyers : [{ name: cli.buyer || "", phone: cli.phone || "", role: "Proprietário" }],
       });
     } else {
       setEditingClient(null);
-      const nextOrder = clients.length + 1;
-      const nextId = `CLI-R1-${String(nextOrder).padStart(3, "0")}`;
+      const targetRoute = selectedRoute !== "Todas" ? selectedRoute : "R1";
+      // Calcula a próxima ordem na rota selecionada (Requisito 7)
+      const existingOrders = clients
+        .filter((c) => c.routeId === targetRoute)
+        .map((c) => Number(c.order || 0));
+      const nextOrder = existingOrders.length > 0 ? Math.max(...existingOrders) + 1 : 1;
+      const initialCode = generateClientCode(targetRoute, nextOrder);
+
+      setCreditLimitDisplay("R$ 2.000,00");
       setFormData({
-        id: nextId,
-        routeId: selectedRoute !== "Todas" ? selectedRoute : "R1",
-        code: `R1C${nextOrder}`,
+        id: `CLI-${targetRoute}-${String(nextOrder).padStart(3, "0")}`,
+        routeId: targetRoute,
+        order: nextOrder,
+        code: initialCode,
         name: "",
+        imageUrl: "",
         buyers: [{ name: "", phone: "", role: "Proprietário" }],
         conferenceInfo: "prazo 30 dias",
         acceptsPA: true,
@@ -277,7 +357,74 @@ export default function LukeClientesPage() {
     setIsModalOpen(true);
   };
 
-  // Compradores Dinâmicos (Até 5) - Sem prefixos fixos
+  // Alteração de Rota com Recálculo de Código (Requisito 7)
+  const handleRouteChange = (newRoute: string) => {
+    const existingOrders = clients
+      .filter((c) => c.routeId === newRoute)
+      .map((c) => Number(c.order || 0));
+    const nextOrder = existingOrders.length > 0 ? Math.max(...existingOrders) + 1 : 1;
+    const newCode = generateClientCode(newRoute, nextOrder);
+    setFormData((prev) => ({
+      ...prev,
+      routeId: newRoute,
+      order: nextOrder,
+      code: newCode,
+    }));
+  };
+
+  // Alteração de Ordem com Recálculo de Código (Requisito 7)
+  const handleOrderChange = (newOrder: number) => {
+    const newCode = generateClientCode(formData.routeId || "R1", newOrder);
+    setFormData((prev) => ({
+      ...prev,
+      order: newOrder,
+      code: newCode,
+    }));
+  };
+
+  // Alteração com Máscara de Limite de Compras (Requisito 8)
+  const handleCreditLimitChange = (val: string) => {
+    const res = formatCurrencyInput(val);
+    setCreditLimitDisplay(res.formatted);
+    setFormData((prev) => ({ ...prev, creditLimit: res.raw }));
+  };
+
+  // Consulta Automática por CEP no ViaCEP (Requisito 9)
+  const handleCepChange = async (val: string) => {
+    const clean = val.replace(/\D/g, "").slice(0, 8);
+    const masked = clean.length > 5 ? `${clean.slice(0, 5)}-${clean.slice(5)}` : clean;
+    setFormData((prev) => ({ ...prev, cep: masked }));
+
+    if (clean.length === 8) {
+      setIsSearchingCep(true);
+      const addr = await fetchAddressByCep(clean);
+      setIsSearchingCep(false);
+      if (addr) {
+        setFormData((prev) => ({
+          ...prev,
+          street: addr.street || prev.street,
+          neighborhood: addr.neighborhood || prev.neighborhood,
+          city: addr.city || prev.city,
+          state: addr.state || prev.state,
+          complement: addr.complement || prev.complement,
+        }));
+      }
+    }
+  };
+
+  // Upload da Foto do Estabelecimento (Requisito 11)
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData((prev) => ({ ...prev, imageUrl: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Compradores Dinâmicos (Até 5) com Máscara de Telefone (Requisito 12)
   const handleAddBuyer = () => {
     if ((formData.buyers || []).length < 5) {
       setFormData({
@@ -294,10 +441,12 @@ export default function LukeClientesPage() {
 
   const handleBuyerChange = (index: number, field: keyof BuyerContact, value: string) => {
     const updated = [...(formData.buyers || [])];
-    updated[index] = { ...updated[index], [field]: value };
+    const finalVal = field === "phone" ? maskPhone(value) : value;
+    updated[index] = { ...updated[index], [field]: finalVal };
     setFormData({ ...formData, buyers: updated });
   };
 
+  // Salvar Cliente com Feedback Visual e Fechamento de Tela (Requisito 13)
   const handleSaveClient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name?.trim()) return;
@@ -313,12 +462,13 @@ export default function LukeClientesPage() {
     const clientPayload: ClientItem = {
       id: formData.id || `CLI-${Date.now()}`,
       routeId: formData.routeId || "R1",
-      order: editingClient?.order || clients.length + 1,
-      code: formData.code || `C${clients.length + 1}`,
+      order: Number(formData.order || 1),
+      code: formData.code || generateClientCode(formData.routeId || "R1", formData.order || 1),
       name: formData.name.trim(),
+      imageUrl: formData.imageUrl || "",
       buyers: validBuyers.length > 0 ? validBuyers : [{ name: primaryBuyer, phone: primaryPhone }],
       buyer: primaryBuyer,
-      conferenceInfo: formData.conferenceInfo || "Prazo",
+      conferenceInfo: formData.conferenceInfo || "prazo 30 dias",
       acceptsPA: formData.acceptsPA ?? true,
       status: formData.status || "ACTIVE",
       phone: primaryPhone,
@@ -348,13 +498,28 @@ export default function LukeClientesPage() {
     try {
       await setDoc(doc(db, `tenants/${tenantId}/clients`, clientPayload.id), {
         ...clientPayload,
-        updatedAt: new Date(),
+        updatedAt: new Date().toISOString(),
+      });
+      await logActivity(tenantId, {
+        userName: "Administrador",
+        userEmail: "admin@luke.com",
+        action: editingClient ? "CLIENTE_EDITADO" : "CLIENTE_CRIADO",
+        entity: "CLIENTE",
+        entityId: clientPayload.id,
+        details: `${editingClient ? "Editou" : "Cadastrou"} cliente "${clientPayload.name}" na Rota ${clientPayload.routeId} (Ordem: ${clientPayload.order}, Código: ${clientPayload.code}).`,
       });
     } catch (err) {
       console.warn("Gravado localmente:", err);
     }
 
+    // Fecha o modal e exibe resposta visual imediata (Requisito 13)
     setIsModalOpen(false);
+    setEditingClient(null);
+    setToast({
+      type: "success",
+      title: editingClient ? "Cliente Atualizado!" : "Cliente Cadastrado com Sucesso!",
+      message: `${clientPayload.name} salvo com código ${clientPayload.code}.`,
+    });
   };
 
   const handleToggleStatus = async (cli: ClientItem) => {
@@ -366,27 +531,57 @@ export default function LukeClientesPage() {
     try {
       await setDoc(
         doc(db, `tenants/${tenantId}/clients`, cli.id),
-        { status: updatedStatus, updatedAt: new Date() },
+        { status: updatedStatus, updatedAt: new Date().toISOString() },
         { merge: true }
       );
+      await logActivity(tenantId, {
+        userName: "Administrador",
+        userEmail: "admin@luke.com",
+        action: "CLIENTE_STATUS",
+        entity: "CLIENTE",
+        entityId: cli.id,
+        details: `Alterou status do cliente ${cli.name} para ${updatedStatus}.`,
+      });
     } catch (e) {}
+
+    setToast({
+      type: "info",
+      title: "Status Atualizado",
+      message: `${cli.name} agora está ${updatedStatus === "ACTIVE" ? "Ativo" : "Inativo"}.`,
+    });
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm("Deseja realmente remover este cliente do cadastro?")) {
+  const handleDelete = async (id: string, name: string) => {
+    if (confirm(`Deseja realmente remover o cliente "${name}" do cadastro?`)) {
       setClients((prev) => prev.filter((c) => c.id !== id));
       try {
         await deleteDoc(doc(db, `tenants/${tenantId}/clients`, id));
+        await logActivity(tenantId, {
+          userName: "Administrador",
+          userEmail: "admin@luke.com",
+          action: "CLIENTE_EXCLUIDO",
+          entity: "CLIENTE",
+          entityId: id,
+          details: `Removeu o cliente "${name}" do cadastro.`,
+        });
       } catch (e) {}
+
+      setToast({
+        type: "info",
+        title: "Cliente Excluído",
+        message: `${name} foi removido do cadastro.`,
+      });
     }
   };
 
   const totalClients = clients.length;
   const activeClients = clients.filter((c) => c.status === "ACTIVE").length;
-  const clientsWithPA = clients.filter((c) => c.acceptsPA).length;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      {/* Toast de Feedback Visual (Requisito 13) */}
+      <ToastFeedback toast={toast} onClose={() => setToast(null)} />
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -396,8 +591,8 @@ export default function LukeClientesPage() {
               {totalClients} cadastrados
             </span>
           </div>
-          <p className="text-brand-offwhite/60 text-sm mt-1">
-            Gestão completa de clientes, compradores com WhatsApp, condições comerciais e limites de compras mensais.
+          <p className="text-brand-offwhite/60 text-xs mt-1">
+            Gestão completa com código automatizado por rota, foto da fachada, preenchimento por CEP e limites de compras.
           </p>
         </div>
 
@@ -426,307 +621,402 @@ export default function LukeClientesPage() {
         </div>
       </div>
 
-      {/* Cards de Métricas */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Total Clientes</span>
-            <Store size={18} className="text-brand-gold" />
-          </div>
-          <p className="text-2xl font-black text-brand-offwhite mt-2">{totalClients}</p>
-          <span className="text-[11px] text-green-400 font-medium">Base ativa</span>
+      {/* Barra de Filtros e Organizador de Colunas (Requisito 15) */}
+      <div className="bg-brand-graphite p-4 rounded-xl border border-brand-blue/30 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-2.5 text-brand-offwhite/40" size={16} />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Buscar por nome, código, celular, bairro ou cidade..."
+            className="w-full pl-9 pr-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-xs text-brand-offwhite focus:outline-none focus:border-brand-gold"
+          />
         </div>
 
-        <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Ativos</span>
-            <UserCheck size={18} className="text-green-400" />
-          </div>
-          <p className="text-2xl font-black text-green-400 mt-2">{activeClients}</p>
-          <span className="text-[11px] text-brand-offwhite/50">Em rota de visita</span>
-        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Filtro Rota */}
+          <select
+            value={selectedRoute}
+            onChange={(e) => setSelectedRoute(e.target.value)}
+            className="bg-brand-black border border-brand-blue/40 text-brand-offwhite text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-brand-gold"
+          >
+            {availableRoutes.map((r) => (
+              <option key={r} value={r}>
+                {r === "Todas" ? "Todas as Rotas" : `Rota ${r}`}
+              </option>
+            ))}
+          </select>
 
-        <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Aceitam P.A.</span>
-            <CreditCard size={18} className="text-purple-400" />
-          </div>
-          <p className="text-2xl font-black text-purple-400 mt-2">
-            {clientsWithPA}
-          </p>
-          <span className="text-[11px] text-brand-offwhite/50">Elegíveis a Prazo Aberto</span>
-        </div>
+          {/* Filtro Condição */}
+          <select
+            value={selectedCondition}
+            onChange={(e) => setSelectedCondition(e.target.value)}
+            className="bg-brand-black border border-brand-blue/40 text-brand-offwhite text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-brand-gold"
+          >
+            {availableConditions.map((c) => (
+              <option key={c} value={c}>
+                {c === "Todas" ? "Todas as Condições" : c}
+              </option>
+            ))}
+          </select>
 
-        <div className="bg-brand-graphite p-5 rounded-2xl border border-brand-blue/30 shadow-md">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-brand-offwhite/60 font-semibold uppercase">Rotas Ativas</span>
-            <MapPin size={18} className="text-brand-gold" />
-          </div>
-          <p className="text-2xl font-black text-brand-gold mt-2">24 Rotas</p>
-          <span className="text-[11px] text-brand-offwhite/50">R1-R12 e F1-F12</span>
-        </div>
-      </div>
+          {/* Filtro Status */}
+          <select
+            value={statusFilter}
+            onChange={(e: any) => setStatusFilter(e.target.value)}
+            className="bg-brand-black border border-brand-blue/40 text-brand-offwhite text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-brand-gold"
+          >
+            <option value="ALL">Todos os Status</option>
+            <option value="ACTIVE">Apenas Ativos</option>
+            <option value="INACTIVE">Apenas Inativos</option>
+          </select>
 
-      {/* Seletor de Rotas */}
-      <div className="space-y-2">
-        <span className="text-xs font-bold text-brand-offwhite/70 uppercase tracking-wider">
-          Filtrar por Rota:
-        </span>
-        <div className="flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-thin">
-          {ROUTES.slice(0, 15).map((r) => (
-            <button
-              key={r}
-              onClick={() => setSelectedRoute(r)}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition border ${
-                selectedRoute === r
-                  ? "bg-brand-gold text-brand-black border-brand-gold shadow-md"
-                  : "bg-brand-graphite text-brand-offwhite/70 border-brand-blue/30 hover:text-brand-offwhite hover:border-brand-gold/40"
-              }`}
-            >
-              {r === "Todas" ? "Todas as Rotas" : `Rota ${r}`}
-            </button>
-          ))}
+          {/* Organizador de Colunas (Requisito 15) */}
+          <ColumnOrganizer
+            storageKey="kliro_cols_clientes"
+            columns={CLIENT_COLUMNS}
+            visibleColumns={visibleColumns}
+            onChange={setVisibleColumns}
+          />
         </div>
       </div>
 
-      {/* Tabela de Clientes */}
-      <div className="bg-brand-graphite rounded-2xl border border-brand-blue/30 shadow-xl overflow-hidden">
-        {/* Barra de Busca e Filtros */}
-        <div className="p-4 border-b border-brand-blue/30 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3 bg-brand-black/50">
-          <div className="relative flex-1 max-w-md">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="h-4 w-4 text-brand-offwhite/40" />
-            </div>
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="block w-full pl-10 pr-3 py-2 bg-brand-black border border-brand-blue/50 rounded-lg text-sm text-brand-offwhite placeholder-brand-offwhite/30 focus:outline-none focus:ring-1 focus:ring-brand-gold"
-              placeholder="Buscar cliente, comprador, celular, bairro ou cidade..."
-            />
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <select
-              value={selectedCondition}
-              onChange={(e) => setSelectedCondition(e.target.value)}
-              className="bg-brand-black border border-brand-blue/50 text-brand-offwhite text-xs rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-brand-gold"
-            >
-              <option value="Todas">Todas as Condições</option>
-              <option value="prazo">Prazo 30 Dias</option>
-              <option value="consignado">Consignado</option>
-              <option value="Lamina">Compra Lâmina</option>
-              <option value="Intermitente">Intermitente</option>
-            </select>
-
-            <select
-              value={statusFilter}
-              onChange={(e: any) => setStatusFilter(e.target.value)}
-              className="bg-brand-black border border-brand-blue/50 text-brand-offwhite text-xs rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-brand-gold"
-            >
-              <option value="ALL">Todos os Status</option>
-              <option value="ACTIVE">Apenas Ativos</option>
-              <option value="INACTIVE">Apenas Inativos</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Listagem */}
+      {/* Listagem de Clientes */}
+      <div className="bg-brand-graphite rounded-xl border border-brand-blue/30 overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-brand-blue/10 border-b border-brand-blue/30 text-brand-offwhite/70 text-xs uppercase tracking-wider">
-                <th className="p-4 font-medium">Cliente / Razão Social</th>
-                <th className="p-4 font-medium">Compradores & WhatsApp (Até 5)</th>
-                <th className="p-4 font-medium">Rota</th>
-                <th className="p-4 font-medium">Endereço & Cidade</th>
-                <th className="p-4 font-medium">Condição & P.A.</th>
-                <th className="p-4 font-medium">Limite Mensal</th>
-                <th className="p-4 font-medium">Status</th>
-                <th className="p-4 font-medium text-right">Ações</th>
+              <tr className="bg-brand-blue/20 border-b border-brand-blue/30 text-brand-offwhite/70 uppercase tracking-wider font-bold">
+                {visibleColumns.includes("client") && <th className="p-3.5">Cliente / Fachada</th>}
+                {visibleColumns.includes("buyers") && <th className="p-3.5">Compradores & WhatsApp (Até 5)</th>}
+                {visibleColumns.includes("route") && <th className="p-3.5">Rota & Ordem</th>}
+                {visibleColumns.includes("address") && <th className="p-3.5">Endereço & Cidade</th>}
+                {visibleColumns.includes("condition") && <th className="p-3.5">Condição Comercial & P.A.</th>}
+                {visibleColumns.includes("limit") && <th className="p-3.5">Limite Mensal</th>}
+                {visibleColumns.includes("status") && <th className="p-3.5">Status</th>}
+                {visibleColumns.includes("actions") && <th className="p-3.5 text-right">Ações</th>}
               </tr>
             </thead>
-            <tbody className="divide-y divide-brand-blue/10 text-sm">
+            <tbody className="divide-y divide-brand-blue/10">
               {filtered.slice(0, 50).map((client) => (
                 <tr key={client.id} className="hover:bg-brand-blue/5 transition group">
-                  <td className="p-4 font-semibold text-brand-offwhite">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 rounded-xl bg-brand-blue/30 border border-brand-gold/30 flex items-center justify-center text-brand-gold shrink-0 font-extrabold text-xs shadow-xs">
-                        {client.name.slice(0, 2).toUpperCase()}
-                      </div>
-                      <div>
-                        <p className="text-brand-offwhite font-bold">{client.name}</p>
-                        <p className="text-xs text-brand-offwhite/40 font-mono">{client.code || client.id}</p>
-                      </div>
-                    </div>
-                  </td>
-
-                  {/* Compradores com WhatsApp */}
-                  <td className="p-4">
-                    <div className="space-y-1.5">
-                      {(client.buyers || [{ name: client.buyer || "Proprietário", phone: client.phone }]).map((b, idx) => (
-                        <div key={idx} className="flex items-center space-x-2">
-                          <span className="text-xs font-semibold text-brand-offwhite/90">
-                            {b.name || "Comprador"}:
-                          </span>
-                          {b.phone ? (
-                            <a
-                              href={getWhatsAppLink(b.phone)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center space-x-1 px-2 py-0.5 bg-green-500/15 hover:bg-green-500/25 border border-green-500/30 rounded-md text-[11px] text-green-400 font-mono font-bold transition group-hover:border-green-400"
-                              title={`Chamar ${b.name || "Comprador"} no WhatsApp`}
-                            >
-                              <MessageCircle size={11} className="text-green-400" />
-                              <span>{formatPhoneBR(b.phone)}</span>
-                            </a>
+                  {/* Cliente / Fachada (Requisitos 11 e 14 - Sem prefixo de iniciais) */}
+                  {visibleColumns.includes("client") && (
+                    <td className="p-3.5 font-bold text-brand-offwhite">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-11 h-11 rounded-xl bg-brand-blue/30 border border-brand-gold/30 flex items-center justify-center shrink-0 overflow-hidden shadow-xs">
+                          {client.imageUrl ? (
+                            <img
+                              src={client.imageUrl}
+                              alt={client.name}
+                              className="w-full h-full object-cover transition-transform group-hover:scale-110"
+                            />
                           ) : (
-                            <span className="text-[11px] text-brand-offwhite/40 italic">Sem WhatsApp</span>
+                            <Store size={20} className="text-brand-gold/80" />
                           )}
                         </div>
-                      ))}
-                    </div>
-                  </td>
+                        <div>
+                          <p className="text-brand-offwhite font-extrabold text-sm">{client.name}</p>
+                          <p className="text-[11px] text-brand-gold font-mono font-bold">{client.code}</p>
+                        </div>
+                      </div>
+                    </td>
+                  )}
 
-                  <td className="p-4">
-                    <span className="px-2.5 py-1 bg-brand-gold/15 text-brand-gold font-bold text-xs rounded-md border border-brand-gold/30">
-                      {client.routeId}
-                    </span>
-                  </td>
+                  {/* Compradores com WhatsApp */}
+                  {visibleColumns.includes("buyers") && (
+                    <td className="p-3.5">
+                      <div className="space-y-1">
+                        {(client.buyers || [{ name: client.buyer || "Proprietário", phone: client.phone }]).map((b, idx) => (
+                          <div key={idx} className="flex items-center space-x-2">
+                            <span className="text-[11px] font-semibold text-brand-offwhite/90">
+                              {b.name || "Comprador"}:
+                            </span>
+                            {b.phone ? (
+                              <a
+                                href={getWhatsAppLink(b.phone)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center space-x-1 px-2 py-0.5 bg-green-500/15 hover:bg-green-500/25 border border-green-500/30 rounded-md text-[10px] text-green-400 font-mono font-bold transition"
+                                title={`Chamar ${b.name || "Comprador"} no WhatsApp`}
+                              >
+                                <MessageCircle size={10} className="text-green-400" />
+                                <span>{formatPhoneBR(b.phone)}</span>
+                              </a>
+                            ) : (
+                              <span className="text-[10px] text-brand-offwhite/40 italic">Sem WhatsApp</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </td>
+                  )}
+
+                  {/* Rota & Ordem (Requisito 7) */}
+                  {visibleColumns.includes("route") && (
+                    <td className="p-3.5">
+                      <div className="flex flex-col space-y-1">
+                        <span className="px-2.5 py-0.5 bg-brand-gold/15 text-brand-gold font-bold text-xs rounded-md border border-brand-gold/30 text-center font-mono">
+                          {client.routeId}
+                        </span>
+                        <span className="text-[10px] text-brand-offwhite/60 font-mono text-center">
+                          Visita #{client.order || 1}
+                        </span>
+                      </div>
+                    </td>
+                  )}
 
                   {/* Endereço Estruturado */}
-                  <td className="p-4 text-xs text-brand-offwhite/70 max-w-xs">
-                    <p className="font-medium text-brand-offwhite/90">
-                      {client.neighborhood ? `${client.neighborhood}, ${client.city || "BH"}` : client.address}
-                    </p>
-                    <p className="text-[11px] text-brand-offwhite/40 truncate">
-                      {client.street ? `${client.street}, ${client.number}` : client.address}
-                    </p>
-                  </td>
+                  {visibleColumns.includes("address") && (
+                    <td className="p-3.5 text-xs text-brand-offwhite/70 max-w-xs">
+                      <p className="font-bold text-brand-offwhite/90">
+                        {client.neighborhood ? `${client.neighborhood}, ${client.city || "BH"}` : client.address}
+                      </p>
+                      <p className="text-[10px] text-brand-offwhite/50 truncate">
+                        {client.street ? `${client.street}, ${client.number}` : client.address}
+                      </p>
+                    </td>
+                  )}
 
-                  <td className="p-4 space-y-1">
-                    <span className="block text-xs px-2 py-0.5 bg-brand-black/60 text-brand-offwhite/90 rounded-md border border-brand-blue/20">
-                      {client.conferenceInfo}
-                    </span>
-                    <span
-                      className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded ${
-                        client.acceptsPA
-                          ? "bg-purple-500/20 text-purple-300 border border-purple-500/30"
-                          : "bg-gray-500/20 text-gray-400 border border-gray-500/30"
-                      }`}
-                    >
-                      {client.acceptsPA ? "✓ Aceita P.A." : "✕ Sem P.A."}
-                    </span>
-                  </td>
+                  {/* Condição Comercial & P.A. */}
+                  {visibleColumns.includes("condition") && (
+                    <td className="p-3.5 space-y-1">
+                      <span className="block text-xs px-2 py-0.5 bg-brand-black/60 text-brand-offwhite/90 rounded-md border border-brand-blue/20">
+                        {client.conferenceInfo}
+                      </span>
+                      <span
+                        className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded ${
+                          client.acceptsPA
+                            ? "bg-purple-500/20 text-purple-300 border border-purple-500/30"
+                            : "bg-gray-500/20 text-gray-400 border border-gray-500/30"
+                        }`}
+                      >
+                        {client.acceptsPA ? "✓ Aceita P.A." : "✕ Sem P.A."}
+                      </span>
+                    </td>
+                  )}
 
-                  <td className="p-4 text-xs font-bold text-brand-gold font-mono">
-                    {formatValue(client.creditLimit || 0, "currency")}
-                  </td>
+                  {/* Limite de Compras */}
+                  {visibleColumns.includes("limit") && (
+                    <td className="p-3.5 font-bold text-brand-gold font-mono text-xs">
+                      {formatValue(client.creditLimit || 0, "currency")}
+                    </td>
+                  )}
 
-                  <td className="p-4">
-                    <button
-                      onClick={() => handleToggleStatus(client)}
-                      className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border transition ${
-                        client.status === "ACTIVE"
-                          ? "bg-green-500/10 text-green-400 border-green-500/20 hover:bg-green-500/20"
-                          : "bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/20"
-                      }`}
-                    >
-                      {client.status === "ACTIVE" ? "Ativo" : "Inativo"}
-                    </button>
-                  </td>
+                  {/* Status */}
+                  {visibleColumns.includes("status") && (
+                    <td className="p-3.5">
+                      <button
+                        onClick={() => handleToggleStatus(client)}
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition ${
+                          client.status === "ACTIVE"
+                            ? "bg-green-500/15 text-green-400 border-green-500/30 hover:bg-green-500/25"
+                            : "bg-rose-500/15 text-rose-400 border-rose-500/30 hover:bg-rose-500/25"
+                        }`}
+                      >
+                        {client.status === "ACTIVE" ? "Ativo" : "Inativo"}
+                      </button>
+                    </td>
+                  )}
 
-                  <td className="p-4 text-right space-x-2 whitespace-nowrap">
-                    <button
-                      onClick={() => handleOpenModal(client)}
-                      title="Editar Cliente"
-                      className="text-brand-offwhite/50 hover:text-brand-gold p-1.5 rounded-lg hover:bg-brand-blue/10 transition"
-                    >
-                      <Edit2 size={16} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(client.id)}
-                      title="Excluir"
-                      className="text-brand-offwhite/50 hover:text-red-400 p-1.5 rounded-lg hover:bg-brand-blue/10 transition"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </td>
+                  {/* Ações */}
+                  {visibleColumns.includes("actions") && (
+                    <td className="p-3.5 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end space-x-2">
+                        <button
+                          onClick={() => handleOpenModal(client)}
+                          className="p-1.5 text-brand-offwhite/70 hover:text-brand-gold hover:bg-brand-blue/20 rounded-lg transition"
+                          title="Editar Cliente"
+                        >
+                          <Edit2 size={15} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(client.id, client.name)}
+                          className="p-1.5 text-brand-offwhite/50 hover:text-red-400 hover:bg-brand-blue/20 rounded-lg transition"
+                          title="Excluir Cliente"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-
-        {filtered.length > 50 && (
-          <div className="p-3 bg-brand-black/40 text-center text-xs text-brand-offwhite/50 border-t border-brand-blue/20">
-            Exibindo 50 de {filtered.length} clientes filtrados. Use a busca para filtrar por bairro, cidade ou nome.
-          </div>
-        )}
       </div>
 
-      {/* Modal de Cadastro / Edição Completa */}
+      {/* ========================================================================= */}
+      {/* MODAL: CADASTRO / EDIÇÃO DE CLIENTE                                       */}
+      {/* ========================================================================= */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-brand-black/80 backdrop-blur-sm">
-          <div className="bg-brand-graphite w-full max-w-2xl rounded-2xl border border-brand-blue/40 shadow-2xl p-6 relative max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => setIsModalOpen(false)}
-              className="absolute top-4 right-4 text-brand-offwhite/50 hover:text-brand-offwhite p-1 rounded-lg hover:bg-brand-blue/20 transition"
-            >
-              <X size={20} />
-            </button>
-
-            <div className="flex items-center space-x-3 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-brand-gold/20 text-brand-gold flex items-center justify-center border border-brand-gold/30">
-                <Store size={20} />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-brand-offwhite">
-                  {editingClient ? "Editar Cliente" : "Novo Cliente"}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-brand-graphite border border-brand-blue/50 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="p-5 border-b border-brand-blue/30 flex justify-between items-center bg-brand-black/40">
+              <div className="flex items-center space-x-2">
+                <Store className="text-brand-gold" size={20} />
+                <h3 className="text-lg font-black text-brand-offwhite">
+                  {editingClient ? `Editar Cliente: ${editingClient.name}` : "Novo Cliente"}
                 </h3>
-                <p className="text-xs text-brand-offwhite/60">
-                  Cadastre compradores com WhatsApp, condição comercial, limite de compras mensal e endereço estruturado.
-                </p>
               </div>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="text-brand-offwhite/50 hover:text-brand-offwhite"
+              >
+                <X size={18} />
+              </button>
             </div>
 
-            <form onSubmit={handleSaveClient} className="space-y-5">
-              {/* Nome e CNPJ/CPF */}
+            <form onSubmit={handleSaveClient} className="p-6 overflow-y-auto space-y-5 custom-scrollbar flex-1">
+              {/* Foto do Estabelecimento e Dados Principais (Requisito 11 e 14) */}
+              <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-brand-black/40 rounded-xl border border-brand-blue/30">
+                <div className="relative group shrink-0">
+                  <div className="w-20 h-20 rounded-xl bg-brand-blue/30 border-2 border-brand-gold/50 flex items-center justify-center overflow-hidden shadow-md">
+                    {formData.imageUrl ? (
+                      <img
+                        src={formData.imageUrl}
+                        alt="Fachada"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <Store size={32} className="text-brand-gold/60" />
+                    )}
+                  </div>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handlePhotoUpload}
+                    accept="image/*"
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="absolute -bottom-1 -right-1 p-1.5 bg-brand-gold text-brand-black rounded-lg shadow hover:bg-yellow-500 transition"
+                    title="Carregar Foto da Fachada"
+                  >
+                    <Camera size={14} />
+                  </button>
+                </div>
+
+                <div className="flex-1 w-full space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-brand-offwhite mb-1">
+                      Foto da Fachada / Estabelecimento (Reconhecimento Visual em Campo)
+                    </label>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="text"
+                        value={formData.imageUrl || ""}
+                        onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
+                        placeholder="Cole a URL da imagem ou clique no ícone da câmera para enviar arquivo..."
+                        className="flex-1 px-3 py-1.5 bg-brand-black border border-brand-blue/40 rounded-lg text-xs text-brand-offwhite focus:outline-none focus:border-brand-gold"
+                      />
+                      {formData.imageUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, imageUrl: "" })}
+                          className="px-2 py-1.5 bg-brand-graphite border border-brand-blue/40 text-brand-offwhite/60 hover:text-red-400 rounded-lg text-xs"
+                        >
+                          Limpar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Nome e Documento */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                    Nome do Cliente / Razão Social
+                  <label className="block text-xs font-bold text-brand-offwhite mb-1">
+                    Nome do Cliente / Razão Social *
                   </label>
                   <input
                     type="text"
                     required
                     value={formData.name || ""}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="Ex: Barbearia Dom Lucas Barber Club"
                     className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold"
-                    placeholder="Ex: Barbearia Vip Style ou Salão Realce"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
+                  <label className="block text-xs font-bold text-brand-offwhite mb-1">
                     CNPJ ou CPF
                   </label>
                   <input
                     type="text"
                     value={formData.document || ""}
                     onChange={(e) => setFormData({ ...formData, document: e.target.value })}
-                    className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite font-mono focus:outline-none focus:border-brand-gold"
                     placeholder="00.000.000/0001-00"
+                    className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite font-mono focus:outline-none focus:border-brand-gold"
                   />
                 </div>
               </div>
 
-              {/* BLOCO: COMPRADORES (ATÉ 5) */}
+              {/* BLOCO: ROTA, ORDEM DE VISITA E CÓDIGO AUTOMÁTICO (REQUISITO 7) */}
+              <div className="p-4 bg-brand-black/50 rounded-xl border border-brand-blue/30 space-y-3">
+                <label className="text-xs font-bold text-brand-gold uppercase tracking-wider flex items-center space-x-1.5">
+                  <MapPin size={15} />
+                  <span>Logística da Rota & Código Automatizado (Requisito 7)</span>
+                </label>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] text-brand-offwhite/70 mb-1">
+                      Rota Atribuída
+                    </label>
+                    <select
+                      value={formData.routeId || "R1"}
+                      onChange={(e) => handleRouteChange(e.target.value)}
+                      className="w-full px-3 py-2 bg-brand-graphite border border-brand-blue/40 rounded-lg text-xs text-brand-offwhite font-bold focus:outline-none focus:border-brand-gold"
+                    >
+                      {availableRoutes.filter((r) => r !== "Todas").map((r) => (
+                        <option key={r} value={r}>
+                          Rota {r}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-brand-offwhite/70 mb-1">
+                      Ordem de Atendimento / Visita
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={formData.order || 1}
+                      onChange={(e) => handleOrderChange(Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-brand-graphite border border-brand-blue/40 rounded-lg text-xs text-brand-offwhite font-mono font-bold focus:outline-none focus:border-brand-gold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-brand-offwhite/70 mb-1">
+                      Código Automatizado do Cliente
+                    </label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={formData.code || ""}
+                      className="w-full px-3 py-2 bg-brand-blue/20 border border-brand-gold/40 rounded-lg text-xs text-brand-gold font-mono font-black focus:outline-none cursor-not-allowed"
+                      title="Código gerado automaticamente com base na rota e ordem de atendimento"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* BLOCO: COMPRADORES (ATÉ 5) COM MÁSCARA (REQUISITO 12) */}
               <div className="p-4 bg-brand-black/50 rounded-xl border border-brand-blue/30 space-y-3">
                 <div className="flex justify-between items-center">
                   <label className="text-xs font-bold text-brand-gold uppercase tracking-wider flex items-center space-x-1.5">
                     <MessageCircle size={15} />
-                    <span>Compradores & WhatsApp (Até 5)</span>
+                    <span>Compradores & WhatsApp (Até 5 com Máscara Automática)</span>
                   </label>
                   {(formData.buyers || []).length < 5 && (
                     <button
@@ -760,7 +1050,7 @@ export default function LukeClientesPage() {
                           required
                           value={b.phone}
                           onChange={(e) => handleBuyerChange(idx, "phone", e.target.value)}
-                          placeholder="Celular / WhatsApp (DDD + Número)"
+                          placeholder="(31) 98888-0000"
                           className="w-full px-3 py-1.5 bg-brand-graphite border border-brand-blue/40 rounded-lg text-xs text-green-400 font-mono font-bold focus:outline-none focus:border-brand-gold"
                         />
                       </div>
@@ -782,43 +1072,10 @@ export default function LukeClientesPage() {
                 </div>
               </div>
 
-              {/* Rota e Código */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                    Rota Atribuída
-                  </label>
-                  <select
-                    value={formData.routeId || "R1"}
-                    onChange={(e) => setFormData({ ...formData, routeId: e.target.value })}
-                    className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold"
-                  >
-                    {ROUTES.filter((r) => r !== "Todas").map((r) => (
-                      <option key={r} value={r}>
-                        {r}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                    Código do Cliente (Opcional)
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.code || ""}
-                    onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                    className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite font-mono focus:outline-none focus:border-brand-gold"
-                    placeholder="Ex: R1C10 ou CLI-10"
-                  />
-                </div>
-              </div>
-
-              {/* Condição Comercial, Aceita P.A. e Limite de Compras Mensal */}
+              {/* Condição Comercial, Aceita P.A. e Limite com Máscara Financeira (Requisito 8) */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
+                  <label className="block text-xs font-bold text-brand-offwhite mb-1">
                     Condição Comercial
                   </label>
                   <select
@@ -826,17 +1083,16 @@ export default function LukeClientesPage() {
                     onChange={(e) => setFormData({ ...formData, conferenceInfo: e.target.value })}
                     className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold"
                   >
-                    <option value="prazo 30 dias">Prazo 30 Dias</option>
-                    <option value="prazo + consignado">Prazo + Consignado</option>
-                    <option value="consignado + a vista">Consignado + À Vista</option>
-                    <option value="Compra Lamina">Compra Lâmina</option>
-                    <option value="Intermitente">Intermitente</option>
-                    <option value="A Vista">À Vista</option>
+                    {availableConditions.filter((c) => c !== "Todas").map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
+                  <label className="block text-xs font-bold text-brand-offwhite mb-1">
                     Aceita P.A. (Prazo Aberto)?
                   </label>
                   <select
@@ -849,35 +1105,45 @@ export default function LukeClientesPage() {
                   </select>
                 </div>
 
+                {/* Limite de Compra com Máscara Financeira em Tempo Real (Requisito 8) */}
                 <div>
-                  <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                    Limite de Compras Mensal (R$)
+                  <label className="block text-xs font-bold text-brand-offwhite mb-1">
+                    Limite de Compras Mensal (R$) *
                   </label>
                   <input
-                    type="number"
-                    value={formData.creditLimit || 2000}
-                    onChange={(e) => setFormData({ ...formData, creditLimit: Number(e.target.value) })}
-                    className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-gold font-bold focus:outline-none focus:border-brand-gold"
+                    type="text"
+                    value={creditLimitDisplay}
+                    onChange={(e) => handleCreditLimitChange(e.target.value)}
+                    placeholder="R$ 2.000,00"
+                    className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-gold font-mono font-bold focus:outline-none focus:border-brand-gold"
                   />
                 </div>
               </div>
 
-              {/* BLOCO: ENDEREÇO ESTRUTURADO */}
+              {/* BLOCO: ENDEREÇO COM BUSCA POR CEP (REQUISITO 9) */}
               <div className="p-4 bg-brand-black/50 rounded-xl border border-brand-blue/30 space-y-3">
-                <label className="text-xs font-bold text-brand-offwhite uppercase tracking-wider flex items-center space-x-1.5">
-                  <MapPin size={15} className="text-brand-gold" />
-                  <span>Endereço Detalhado para Logística e Relatórios</span>
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-brand-gold uppercase tracking-wider flex items-center space-x-1.5">
+                    <MapPin size={15} />
+                    <span>Endereço Completo & Preenchimento Automático por CEP (ViaCEP)</span>
+                  </label>
+                  {isSearchingCep && (
+                    <span className="text-[11px] text-brand-gold flex items-center space-x-1 font-bold">
+                      <RefreshCw size={11} className="animate-spin" />
+                      <span>Consultando ViaCEP...</span>
+                    </span>
+                  )}
+                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                   <div>
-                    <label className="block text-[11px] text-brand-offwhite/60 mb-1">CEP</label>
+                    <label className="block text-[11px] text-brand-offwhite/60 mb-1">CEP (8 dígitos)</label>
                     <input
                       type="text"
                       value={formData.cep || ""}
-                      onChange={(e) => setFormData({ ...formData, cep: e.target.value })}
+                      onChange={(e) => handleCepChange(e.target.value)}
                       placeholder="00000-000"
-                      className="w-full px-3 py-1.5 bg-brand-graphite border border-brand-blue/40 rounded-lg text-xs text-brand-offwhite focus:outline-none focus:border-brand-gold font-mono"
+                      className="w-full px-3 py-1.5 bg-brand-graphite border border-brand-blue/40 rounded-lg text-xs text-brand-offwhite focus:outline-none focus:border-brand-gold font-mono font-bold"
                     />
                   </div>
 
@@ -911,7 +1177,7 @@ export default function LukeClientesPage() {
                       type="text"
                       value={formData.complement || ""}
                       onChange={(e) => setFormData({ ...formData, complement: e.target.value })}
-                      placeholder="Sala 2, Loja A"
+                      placeholder="Sala 02, Loja B..."
                       className="w-full px-3 py-1.5 bg-brand-graphite border border-brand-blue/40 rounded-lg text-xs text-brand-offwhite focus:outline-none focus:border-brand-gold"
                     />
                   </div>
@@ -962,30 +1228,32 @@ export default function LukeClientesPage() {
                 </div>
               </div>
 
+              {/* OBSERVAÇÃO DO CLIENTE (REQUISITO 10 - Renomeado de 'Observação da Rota') */}
               <div>
-                <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                  Observações da Rota
+                <label className="block text-xs font-bold text-brand-offwhite mb-1">
+                  Observação do Cliente
                 </label>
                 <textarea
                   rows={2}
                   value={formData.notes || ""}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold"
-                  placeholder="Instruções de entrega, preferências do comprador..."
+                  className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-xs text-brand-offwhite focus:outline-none focus:border-brand-gold"
+                  placeholder="Instruções de entrega, preferências do comprador, dias de melhor atendimento..."
                 />
               </div>
 
+              {/* Botões do Modal */}
               <div className="flex items-center justify-end space-x-3 pt-4 border-t border-brand-blue/30">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-sm text-brand-offwhite/70 hover:text-brand-offwhite transition"
+                  className="px-4 py-2 text-xs font-bold text-brand-offwhite/70 hover:text-brand-offwhite transition"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-brand-gold text-brand-black rounded-lg font-bold hover:bg-yellow-500 transition shadow-lg text-sm"
+                  className="px-6 py-2.5 bg-brand-gold text-brand-black rounded-xl font-extrabold hover:bg-yellow-500 transition shadow-lg text-xs"
                 >
                   Salvar Cliente
                 </button>
