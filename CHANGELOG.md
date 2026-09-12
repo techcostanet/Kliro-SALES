@@ -4,6 +4,23 @@ Todas as melhorias, novidades e correções notáveis deste projeto serão docum
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-09-12
+### Added
+- **Feedback Visual de Gravação na Nuvem em Tempo Real (Todo o Sistema)**:
+  - Componente `ToastFeedback` flutuante via `createPortal` com badge luminoso verde esmeralda `☁️ NUVEM FIRESTORE SINCRONIZADA` e indicador pulsante.
+  - Indicadores dinâmicos em todos os botões de salvar/confirmar com bloqueio automático contra múltiplos cliques, spinner animado e texto explícito *"Gravando na nuvem..."*.
+  - Toasts e alertas com prevenção contra fechamento de modais caso a conexão com a nuvem falhe, evitando perda de dados preenchidos.
+- **Catálogo Mestre Completo de 561 Clientes na Nuvem (`/luke/clientes`)**:
+  - Módulo `clientsCatalog.ts` integrando a mesclagem automática (`mergeClientsWithCatalog`) entre banco de dados e fallback local.
+  - Semeamento em lote permanente de todos os 561 clientes com códigos de rota no banco Firestore `klirosales`.
+  - Botão no cabeçalho com indicador percentual para ressincronização em massa sob demanda.
+
+### Fixed
+- **Persistência de Edição de Clientes no Firestore (`klirosales`)**:
+  - Correção da inicialização do Firebase Firestore para o banco de dados dedicado `"klirosales"`, eliminando o erro silencioso `5 NOT_FOUND` que descartava as gravações.
+  - Ativação de `{ ignoreUndefinedProperties: true }` no SDK do Firestore, evitando falhas de gravação em campos opcionais.
+  - Validação de persistência entre abas e recarregamentos de página comprovada por testes automatizados no navegador.
+
 ## [1.7.0] - 2026-08-27
 ### Added
 - **Logomarca Dinâmica da Empresa na Barra Lateral (`/luke`)**:

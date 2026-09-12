@@ -31,15 +31,23 @@ import {
   CalendarCheck,
   Check,
   Printer,
+  Cloud,
 } from "lucide-react";
 import { collection, getDocs, doc, setDoc, deleteDoc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { usePrivacy } from "@/lib/privacyContext";
 import { formatCurrency, formatNumberBR } from "@/lib/formatters";
 import { VENDOR_COLOR_PALETTE, getVendorColor, getVendorSolidBadgeStyles } from "@/lib/vendorColors";
-import { MASTER_ROUTES_CATALOG, RouteMaster, ScheduledRouteEvent } from "@/lib/routesCatalog";
+import {
+  MASTER_ROUTES_CATALOG,
+  RouteMaster,
+  ScheduledRouteEvent,
+  ensureRoutesSeeded,
+  mergeRoutesWithCatalog,
+} from "@/lib/routesCatalog";
 import VendorBadge from "@/components/VendorBadge";
 import RoutePrintSheet from "@/components/RoutePrintSheet";
+import ToastFeedback, { ToastMessage } from "@/components/ToastFeedback";
 import Link from "next/link";
 
 // Dados iniciais replicando fielmente o calendário real da LUKE (Agosto 2026 / Google Calendar)
@@ -113,12 +121,15 @@ export default function LukeRotasPage() {
 
   // Estados principais
   const [scheduledEvents, setScheduledEvents] = useState<ScheduledRouteEvent[]>(INITIAL_SCHEDULED_EVENTS);
+  const [availableRoutes, setAvailableRoutes] = useState<RouteMaster[]>(MASTER_ROUTES_CATALOG);
   const [viewMode, setViewMode] = useState<"MONTH" | "WEEK" | "DAY" | "LIST">("MONTH");
   const [currentYear, setCurrentYear] = useState<number>(2026);
   const [currentMonth, setCurrentMonth] = useState<number>(7); // 0-indexed (7 = Agosto)
   const [selectedDate, setSelectedDate] = useState<string>("2026-08-27"); // Data foco
   const [loadingFirestore, setLoadingFirestore] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Filtros
   const [searchTerm, setSearchTerm] = useState("");
@@ -183,8 +194,25 @@ export default function LukeRotasPage() {
     }
   };
 
+  const fetchRoutes = async () => {
+    try {
+      const routesSnap = await getDocs(collection(db, `tenants/${tenantId}/routes`));
+      if (!routesSnap.empty) {
+        const loaded: RouteMaster[] = [];
+        routesSnap.forEach((d) => loaded.push({ id: d.id, ...d.data() } as RouteMaster));
+        setAvailableRoutes(mergeRoutesWithCatalog(loaded));
+      } else {
+        const seeded = await ensureRoutesSeeded(tenantId, db);
+        setAvailableRoutes(seeded);
+      }
+    } catch (err: any) {
+      console.warn("Rotas catalog fallback:", err?.message);
+    }
+  };
+
   useEffect(() => {
     fetchSchedules();
+    fetchRoutes();
     const loadCompany = async () => {
       try {
         const snap = await getDoc(doc(db, "tenants/tenant_luke_001/settings", "company"));
@@ -423,39 +451,70 @@ export default function LukeRotasPage() {
       notes: formData.notes || "",
     };
 
-    if (editingEvent) {
-      setScheduledEvents((prev) =>
-        prev.map((item) => (item.id === editingEvent.id ? payload : item))
-      );
-    } else {
-      setScheduledEvents((prev) => [...prev, payload]);
-    }
-
+    setIsSaving(true);
     try {
       await setDoc(doc(db, `tenants/${tenantId}/route_schedules`, payload.id), {
         ...payload,
-        updatedAt: new Date(),
+        updatedAt: new Date().toISOString(),
       });
-    } catch (err) {
-      console.warn("Gravado localmente:", err);
-    }
 
-    setIsEventModalOpen(false);
+      if (editingEvent) {
+        setScheduledEvents((prev) =>
+          prev.map((item) => (item.id === editingEvent.id ? payload : item))
+        );
+      } else {
+        setScheduledEvents((prev) => [...prev, payload]);
+      }
+
+      setIsEventModalOpen(false);
+      setToast({
+        type: "cloud_success",
+        title: editingEvent ? "Agendamento Salvo na Nuvem!" : "Rota Agendada na Nuvem!",
+        message: `${payload.routeName} agendada para ${payload.date} e gravada no Firestore.`,
+        isCloud: true,
+      });
+    } catch (err: any) {
+      console.error("Erro ao salvar agendamento no Firestore:", err);
+      setToast({
+        type: "cloud_error",
+        title: "Falha ao Salvar na Nuvem",
+        message: err?.message || "Não foi possível gravar o agendamento no banco de dados.",
+        isCloud: true,
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleDeleteEvent = async (id: string) => {
     if (confirm("Remover este agendamento de rota?")) {
-      setScheduledEvents((prev) => prev.filter((item) => item.id !== id));
       try {
         await deleteDoc(doc(db, `tenants/${tenantId}/route_schedules`, id));
-      } catch (e) {}
-      setIsEventModalOpen(false);
+        setScheduledEvents((prev) => prev.filter((item) => item.id !== id));
+        setIsEventModalOpen(false);
+        setToast({
+          type: "cloud_success",
+          title: "Agendamento Removido da Nuvem",
+          message: "O agendamento de rota foi excluído do Firestore com sucesso.",
+          isCloud: true,
+        });
+      } catch (err: any) {
+        console.error("Erro ao excluir agendamento no Firestore:", err);
+        setToast({
+          type: "cloud_error",
+          title: "Erro ao Excluir na Nuvem",
+          message: err?.message || "Não foi possível remover o agendamento do banco de dados.",
+          isCloud: true,
+        });
+      }
     }
   };
 
   // Preencher Rota Mestra ao Selecionar no Modal
   const handleSelectMasterRoute = (code: string) => {
-    const found = MASTER_ROUTES_CATALOG.find((r) => r.code === code);
+    const found =
+      availableRoutes.find((r) => r.code === code) ||
+      MASTER_ROUTES_CATALOG.find((r) => r.code === code);
     if (found) {
       setFormData((prev) => ({
         ...prev,
@@ -652,7 +711,10 @@ export default function LukeRotasPage() {
   return (
     <>
       <div className="space-y-6 print:hidden">
-      {/* Cabeçalho Principal */}
+        {/* Toast Notification */}
+        <ToastFeedback toast={toast} onClose={() => setToast(null)} />
+
+        {/* Cabeçalho Principal */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
           <div className="flex items-center space-x-3">
@@ -1447,33 +1509,44 @@ export default function LukeRotasPage() {
                   className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold font-mono font-bold"
                 >
                   <optgroup label="Rotas Prefixo R (Principal: Alisson)">
-                    {MASTER_ROUTES_CATALOG.filter((r) => r.prefix === "R").map((r) => (
+                    {availableRoutes.filter((r) => r.prefix === "R").map((r) => (
                       <option key={r.code} value={r.code}>
                         {r.code} - {r.name}
                       </option>
                     ))}
                   </optgroup>
                   <optgroup label="Rotas Prefixo F (Principal: Alexandre)">
-                    {MASTER_ROUTES_CATALOG.filter((r) => r.prefix === "F").map((r) => (
+                    {availableRoutes.filter((r) => r.prefix === "F").map((r) => (
                       <option key={r.code} value={r.code}>
                         {r.code} - {r.name}
                       </option>
                     ))}
                   </optgroup>
                   <optgroup label="Rotas G & Y">
-                    {MASTER_ROUTES_CATALOG.filter((r) => r.prefix === "G" || r.prefix === "Y").map((r) => (
+                    {availableRoutes.filter((r) => r.prefix === "G" || r.prefix === "Y").map((r) => (
                       <option key={r.code} value={r.code}>
                         {r.code} - {r.name}
                       </option>
                     ))}
                   </optgroup>
                   <optgroup label="Especiais & Repasses">
-                    {MASTER_ROUTES_CATALOG.filter((r) => r.prefix === "ESPECIAL").map((r) => (
+                    {availableRoutes.filter((r) => r.prefix === "ESPECIAL").map((r) => (
                       <option key={r.code} value={r.code}>
                         {r.code} - {r.name}
                       </option>
                     ))}
                   </optgroup>
+                  {availableRoutes.some((r) => !["R", "F", "G", "Y", "ESPECIAL"].includes(r.prefix)) && (
+                    <optgroup label="Outras Rotas Customizadas">
+                      {availableRoutes
+                        .filter((r) => !["R", "F", "G", "Y", "ESPECIAL"].includes(r.prefix))
+                        .map((r) => (
+                          <option key={r.code} value={r.code}>
+                            {r.code} - {r.name}
+                          </option>
+                        ))}
+                    </optgroup>
+                  )}
                 </select>
               </div>
 
@@ -1602,9 +1675,20 @@ export default function LukeRotasPage() {
                   </button>
                   <button
                     type="submit"
-                    className="px-6 py-2 bg-brand-gold text-brand-black rounded-lg font-extrabold hover:bg-yellow-500 transition shadow-lg text-sm"
+                    disabled={isSaving}
+                    className="px-6 py-2 bg-brand-gold text-brand-black rounded-lg font-extrabold hover:bg-yellow-500 transition shadow-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                   >
-                    Salvar Rota
+                    {isSaving ? (
+                      <>
+                        <RefreshCw size={15} className="animate-spin text-brand-black" />
+                        <span>Gravando na nuvem...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Cloud size={15} className="text-brand-black" />
+                        <span>Salvar Rota</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>

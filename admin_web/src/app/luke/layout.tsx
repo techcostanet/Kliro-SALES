@@ -38,6 +38,9 @@ function LukeSidebarContent({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
+      if (!currentUser) {
+        window.location.href = "/";
+      }
     });
 
     const loadCompanyBranding = async () => {

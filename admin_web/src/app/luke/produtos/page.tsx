@@ -21,11 +21,14 @@ import {
   Sparkles,
   Eye,
   EyeOff,
+  Cloud,
 } from "lucide-react";
 import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import initialProducts from "@/lib/products_catalog.json";
 import { usePrivacy } from "@/lib/privacyContext";
+import ToastFeedback, { ToastMessage } from "@/components/ToastFeedback";
+import { logActivity } from "@/lib/activityLogger";
 
 export interface ProductItem {
   id: string;
@@ -81,6 +84,8 @@ export default function LukeProdutosPage() {
   const [selectedCategory, setSelectedCategory] = useState("Todas");
   const [selectedBrand, setSelectedBrand] = useState("Todas as Marcas");
   const [filterBlocked, setFilterBlocked] = useState<"ALL" | "ACTIVE" | "BLOCKED">("ALL");
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -256,24 +261,48 @@ export default function LukeProdutosPage() {
       active: formData.active !== false,
     };
 
-    if (editingProduct) {
-      setProducts((prev) =>
-        prev.map((p) => (p.id === editingProduct.id ? payload : p))
-      );
-    } else {
-      setProducts((prev) => [payload, ...prev]);
-    }
-
+    setIsSaving(true);
     try {
       await setDoc(doc(db, `tenants/${tenantId}/products`, payload.id), {
         ...payload,
-        updatedAt: new Date(),
+        updatedAt: new Date().toISOString(),
       });
-    } catch (err) {
-      console.warn("Gravado localmente:", err);
-    }
 
-    setIsModalOpen(false);
+      if (editingProduct) {
+        setProducts((prev) =>
+          prev.map((p) => (p.id === editingProduct.id ? payload : p))
+        );
+      } else {
+        setProducts((prev) => [payload, ...prev]);
+      }
+
+      await logActivity(tenantId, {
+        userName: "Administrador",
+        userEmail: "admin@luke.com",
+        action: editingProduct ? "PRODUTO_EDITADO" : "PRODUTO_CRIADO",
+        entity: "PRODUTO",
+        entityId: payload.id,
+        details: `${editingProduct ? "Editou" : "Cadastrou"} produto "${payload.name}" (${payload.code}).`,
+      });
+
+      setIsModalOpen(false);
+      setToast({
+        type: "cloud_success",
+        title: editingProduct ? "Produto Atualizado na Nuvem!" : "Produto Cadastrado na Nuvem!",
+        message: `${payload.name} (${payload.code}) gravado e sincronizado no Firestore.`,
+        isCloud: true,
+      });
+    } catch (err: any) {
+      console.error("Erro ao salvar produto no Firestore:", err);
+      setToast({
+        type: "cloud_error",
+        title: "Falha ao Salvar na Nuvem",
+        message: err?.message || "Não foi possível gravar o produto no banco de dados.",
+        isCloud: true,
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleToggleBlock = async (prod: ProductItem) => {
@@ -282,7 +311,6 @@ export default function LukeProdutosPage() {
       blockedForLoading: !prod.blockedForLoading,
       blockingReason: !prod.blockedForLoading ? "Bloqueado pelo Gestor" : "",
     };
-    setProducts((prev) => prev.map((p) => (p.id === prod.id ? updated : p)));
 
     try {
       await setDoc(
@@ -290,19 +318,48 @@ export default function LukeProdutosPage() {
         {
           blockedForLoading: updated.blockedForLoading,
           blockingReason: updated.blockingReason,
-          updatedAt: new Date(),
+          updatedAt: new Date().toISOString(),
         },
         { merge: true }
       );
-    } catch (e) {}
+      setProducts((prev) => prev.map((p) => (p.id === prod.id ? updated : p)));
+      setToast({
+        type: "cloud_success",
+        title: updated.blockedForLoading ? "Produto Bloqueado na Nuvem" : "Produto Liberado na Nuvem",
+        message: `${prod.name} ${updated.blockedForLoading ? "bloqueado para carregamento" : "liberado para carregamento"} no Firestore.`,
+        isCloud: true,
+      });
+    } catch (err: any) {
+      console.error("Erro ao alterar bloqueio de carregamento no Firestore:", err);
+      setToast({
+        type: "cloud_error",
+        title: "Erro ao Atualizar na Nuvem",
+        message: err?.message || "Não foi possível alterar o status de bloqueio no banco de dados.",
+        isCloud: true,
+      });
+    }
   };
 
   const handleDelete = async (id: string) => {
     if (confirm("Deseja realmente remover este produto do catálogo?")) {
-      setProducts((prev) => prev.filter((p) => p.id !== id));
       try {
         await deleteDoc(doc(db, `tenants/${tenantId}/products`, id));
-      } catch (e) {}
+        setProducts((prev) => prev.filter((p) => p.id !== id));
+        setToast({
+          type: "cloud_success",
+          title: "Produto Removido da Nuvem",
+          message: "Produto excluído do banco de dados Firestore com sucesso.",
+          isCloud: true,
+        });
+      } catch (err: any) {
+        console.error("Erro ao excluir produto no Firestore:", err);
+        setToast({
+          type: "cloud_error",
+          title: "Erro ao Excluir na Nuvem",
+          message: err?.message || "Não foi possível remover o produto do banco de dados.",
+          isCloud: true,
+        });
+      }
     }
   };
 
@@ -314,6 +371,9 @@ export default function LukeProdutosPage() {
 
   return (
     <div className="space-y-8">
+      {/* Toast Feedback Notification */}
+      <ToastFeedback toast={toast} onClose={() => setToast(null)} />
+
       {/* Header com Nomes de 1 Palavra */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -835,9 +895,20 @@ export default function LukeProdutosPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-brand-gold text-brand-black rounded-lg font-bold hover:bg-yellow-500 transition shadow-lg text-sm"
+                  disabled={isSaving}
+                  className="px-6 py-2 bg-brand-gold text-brand-black rounded-lg font-bold hover:bg-yellow-500 transition shadow-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                 >
-                  Salvar Produto
+                  {isSaving ? (
+                    <>
+                      <RefreshCw size={15} className="animate-spin text-brand-black" />
+                      <span>Gravando na nuvem...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Cloud size={15} className="text-brand-black" />
+                      <span>Salvar Produto</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

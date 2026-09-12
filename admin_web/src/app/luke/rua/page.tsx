@@ -27,7 +27,7 @@ import { db } from "@/lib/firebase";
 import initialProducts from "@/lib/products_catalog.json";
 import initialClients from "@/lib/clients_catalog.json";
 import { getVendorColor } from "@/lib/vendorColors";
-import { MASTER_ROUTES_CATALOG, RouteMaster } from "@/lib/routesCatalog";
+import { MASTER_ROUTES_CATALOG, RouteMaster, mergeRoutesWithCatalog } from "@/lib/routesCatalog";
 import VendorBadge from "@/components/VendorBadge";
 import { logActivity } from "@/lib/activityLogger";
 import { formatCurrency, formatPhoneBR } from "@/lib/formatters";
@@ -110,7 +110,9 @@ export default function LukeModoRuaPage() {
           snapshot.forEach((d) => {
             loaded.push({ id: d.id, ...d.data() } as RouteMaster);
           });
-          setRoutesList(loaded);
+          setRoutesList(mergeRoutesWithCatalog(loaded));
+        } else {
+          setRoutesList(MASTER_ROUTES_CATALOG);
         }
       },
       (err) => {

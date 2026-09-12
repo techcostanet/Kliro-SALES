@@ -1,5 +1,6 @@
 {
   "firestore": {
+    "database": "klirosales",
     "rules": "firestore.rules"
   },
   "hosting": {

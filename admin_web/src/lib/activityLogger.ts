@@ -23,6 +23,11 @@ export type ActivityAction =
   | "ROTA_INICIADA"
   | "ROTA_FINALIZADA"
   | "PRECO_ALTERADO"
+  | "PRODUTO_CRIADO"
+  | "PRODUTO_EDITADO"
+  | "PRODUTO_EXCLUIDO"
+  | "FINANCEIRO_BAIXA"
+  | "FINANCEIRO_ESTORNO"
   | "SISTEMA_CONFIGURADO";
 
 export type ActivityEntity =

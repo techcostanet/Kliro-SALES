@@ -14,6 +14,8 @@ import {
   User,
   Sparkles,
   Upload,
+  RefreshCw,
+  Cloud,
 } from "lucide-react";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -108,7 +110,7 @@ export default function LukeEmpresaPage() {
     try {
       await setDoc(doc(db, `tenants/${tenantId}/settings`, "company"), {
         ...formData,
-        updatedAt: new Date(),
+        updatedAt: new Date().toISOString(),
       });
       // Salva também no documento pai do tenant para leitura rápida
       await setDoc(
@@ -118,7 +120,7 @@ export default function LukeEmpresaPage() {
           cnpj: formData.cnpj,
           logoUrl: formData.logoUrl,
           phone: formData.phone,
-          updatedAt: new Date(),
+          updatedAt: new Date().toISOString(),
         },
         { merge: true }
       );
@@ -126,7 +128,8 @@ export default function LukeEmpresaPage() {
       setSavedMessage("✅ Dados da empresa e logomarca salvos com sucesso!");
       setTimeout(() => setSavedMessage(null), 4000);
     } catch (err: any) {
-      setSavedMessage(`❌ Erro ao salvar: ${err?.message}`);
+      console.error("Erro ao salvar dados da empresa no Firestore:", err);
+      setSavedMessage(`❌ Erro ao salvar no banco de dados: ${err?.message || "Erro desconhecido"}`);
     } finally {
       setLoading(false);
     }
@@ -489,10 +492,19 @@ export default function LukeEmpresaPage() {
           <button
             type="submit"
             disabled={loading}
-            className="flex items-center space-x-2 bg-brand-gold text-brand-black px-8 py-3 rounded-xl font-extrabold hover:bg-yellow-500 transition shadow-xl text-base"
+            className="flex items-center space-x-2 bg-brand-gold text-brand-black px-8 py-3 rounded-xl font-extrabold hover:bg-yellow-500 transition shadow-xl text-base disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Save size={20} />
-            <span>{loading ? "Salvando..." : "Salvar Dados da Empresa"}</span>
+            {loading ? (
+              <>
+                <RefreshCw size={20} className="animate-spin text-brand-black" />
+                <span>Gravando na nuvem...</span>
+              </>
+            ) : (
+              <>
+                <Cloud size={20} className="text-brand-black" />
+                <span>Salvar Dados da Empresa</span>
+              </>
+            )}
           </button>
         </div>
       </form>

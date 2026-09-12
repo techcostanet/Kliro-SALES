@@ -23,10 +23,18 @@ import {
   Upload,
   Sparkles,
   RefreshCw,
+  Cloud,
+  CloudUpload,
 } from "lucide-react";
 import { collection, getDocs, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import initialClients from "@/lib/clients_catalog.json";
+import {
+  ClientItem,
+  BuyerContact,
+  BASE_CLIENTS_CATALOG,
+  mergeClientsWithCatalog,
+  seedAllDefaultClients,
+} from "@/lib/clientsCatalog";
 import { usePrivacy } from "@/lib/privacyContext";
 import {
   formatCurrency,
@@ -40,45 +48,13 @@ import ToastFeedback, { ToastMessage } from "@/components/ToastFeedback";
 import ColumnOrganizer, { ColumnDefinition } from "@/components/ColumnOrganizer";
 import { logActivity } from "@/lib/activityLogger";
 
-export interface BuyerContact {
-  name: string;
-  phone: string;
-  role?: string;
-}
-
-export interface ClientItem {
-  id: string;
-  routeId: string;
-  order: number;
-  code: string;
-  name: string;
-  imageUrl?: string; // Foto do Estabelecimento (Requisito 11)
-  buyers: BuyerContact[];
-  buyer?: string;
-  conferenceInfo: string;
-  acceptsPA: boolean;
-  status: "ACTIVE" | "INACTIVE";
-  phone: string;
-  document: string;
-  cep?: string;
-  street?: string;
-  number?: string;
-  complement?: string;
-  neighborhood?: string;
-  city?: string;
-  state?: string;
-  reference?: string;
-  address: string;
-  creditLimit: number;
-  businessType: string;
-  notes?: string; // Observação do Cliente (Requisito 10)
-}
+export type { ClientItem, BuyerContact };
 
 const DEFAULT_ROUTES = [
   "Todas",
   "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10", "R11", "R12",
   "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
-  "G1", "G2", "G3", "G4", "Y3", "Y4", "CENTRO", "RESERVA 1", "RESERVA 2", "Representante"
+  "G1", "G2", "G3", "G4", "Y1", "Y2", "Y3", "Y4", "CENTRO", "RESERVA 1", "RESERVA 2", "Representante"
 ];
 
 const DEFAULT_CONDITIONS = [
@@ -112,6 +88,7 @@ export default function LukeClientesPage() {
 
   // Toast Feedback State (Requisito 13)
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Column Organizer State (Requisito 15)
   const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
@@ -124,23 +101,9 @@ export default function LukeClientesPage() {
     return CLIENT_COLUMNS.map((c) => c.key);
   });
 
-  const [clients, setClients] = useState<ClientItem[]>(() => {
-    return (initialClients as any[]).map((c, idx) => ({
-      ...c,
-      order: Number(c.order || idx + 1),
-      acceptsPA: c.acceptsPA !== undefined ? c.acceptsPA : (c.conferenceInfo?.toLowerCase().includes("prazo") ?? true),
-      buyers: c.buyers && c.buyers.length > 0 ? c.buyers : [{ name: c.buyer || "Proprietário", phone: c.phone || "" }],
-      cep: c.cep || "30140-000",
-      street: c.street || "Rua Comercial",
-      number: c.number || "100",
-      complement: c.complement || "",
-      neighborhood: c.neighborhood || "Centro",
-      city: c.city || "Belo Horizonte",
-      state: c.state || "MG",
-      reference: c.reference || "",
-      notes: c.notes || "",
-    }));
-  });
+  const [clients, setClients] = useState<ClientItem[]>(() => mergeClientsWithCatalog([]));
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
+  const [syncProgress, setSyncProgress] = useState(0);
 
   const [loadingFirestore, setLoadingFirestore] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -201,17 +164,17 @@ export default function LukeClientesPage() {
     try {
       setLoadingFirestore(true);
 
-      // Carregar Rotas Ativas
+      // Carregar Rotas Ativas (mesclando catálogo padrão com rotas do Firestore)
       try {
         const routesSnap = await getDocs(collection(db, `tenants/${tenantId}/routes`));
+        const rCodesSet = new Set<string>(DEFAULT_ROUTES);
         if (!routesSnap.empty) {
-          const rCodes: string[] = ["Todas"];
           routesSnap.forEach((d) => {
             const data = d.data();
-            if (data.code && data.active !== false) rCodes.push(data.code);
+            if (data.code && data.active !== false) rCodesSet.add(data.code);
           });
-          setAvailableRoutes(rCodes);
         }
+        setAvailableRoutes(Array.from(rCodesSet));
       } catch (e) {}
 
       // Carregar Condições de Pagamento Ativas
@@ -227,10 +190,10 @@ export default function LukeClientesPage() {
         }
       } catch (e) {}
 
-      // Carregar Clientes
+      // Carregar Clientes do Firestore e Mesclar com Catálogo Mestre
       const snapshot = await getDocs(collection(db, `tenants/${tenantId}/clients`));
+      const loaded: ClientItem[] = [];
       if (!snapshot.empty) {
-        const loaded: ClientItem[] = [];
         snapshot.forEach((docSnap) => {
           const d = docSnap.data();
           loaded.push({
@@ -261,10 +224,13 @@ export default function LukeClientesPage() {
             creditLimit: Number(d.creditLimit || 2000),
             businessType: d.businessType || "Comércio / Distribuição",
             notes: d.notes || "",
+            updatedAt: d.updatedAt,
+            deleted: Boolean(d.deleted),
           });
         });
-        setClients(loaded);
       }
+      const merged = mergeClientsWithCatalog(loaded);
+      setClients(merged);
     } catch (err: any) {
       console.warn("Firestore fetch offline/fallback:", err?.message);
     } finally {
@@ -275,6 +241,39 @@ export default function LukeClientesPage() {
   useEffect(() => {
     fetchClientsFromFirestore();
   }, []);
+
+  // Sincronização em Massa de todos os 561 clientes para o Firestore
+  const handleSyncAllClientsToCloud = async () => {
+    if (isSyncingAll) return;
+    setIsSyncingAll(true);
+    setSyncProgress(0);
+
+    try {
+      await seedAllDefaultClients(tenantId, db, (processed, total) => {
+        const pct = Math.round((processed / total) * 100);
+        setSyncProgress(pct);
+      });
+
+      await fetchClientsFromFirestore();
+
+      setToast({
+        type: "cloud_success",
+        title: "Catálogo Completo Sincronizado!",
+        message: "Todos os 561 clientes foram gravados e validados no banco de dados Firestore da nuvem.",
+        isCloud: true,
+      });
+    } catch (err: any) {
+      console.error("Erro na sincronização de clientes:", err);
+      setToast({
+        type: "cloud_error",
+        title: "Falha na Sincronização em Massa",
+        message: err?.message || "Não foi possível sincronizar todos os clientes na nuvem.",
+        isCloud: true,
+      });
+    } finally {
+      setIsSyncingAll(false);
+    }
+  };
 
   // Filtragem
   const filtered = useMemo(() => {
@@ -487,19 +486,25 @@ export default function LukeClientesPage() {
       notes: formData.notes || "",
     };
 
-    if (editingClient) {
-      setClients((prev) =>
-        prev.map((c) => (c.id === editingClient.id ? clientPayload : c))
-      );
-    } else {
-      setClients((prev) => [clientPayload, ...prev]);
-    }
-
+    setIsSaving(true);
     try {
       await setDoc(doc(db, `tenants/${tenantId}/clients`, clientPayload.id), {
         ...clientPayload,
         updatedAt: new Date().toISOString(),
       });
+
+      // Atualiza estado local garantindo que o cliente permaneça visível com as alterações
+      setClients((prev) => {
+        const index = prev.findIndex((c) => c.id === clientPayload.id);
+        if (index >= 0) {
+          const updated = [...prev];
+          updated[index] = clientPayload;
+          return updated;
+        } else {
+          return [clientPayload, ...prev];
+        }
+      });
+
       await logActivity(tenantId, {
         userName: "Administrador",
         userEmail: "admin@luke.com",
@@ -508,25 +513,34 @@ export default function LukeClientesPage() {
         entityId: clientPayload.id,
         details: `${editingClient ? "Editou" : "Cadastrou"} cliente "${clientPayload.name}" na Rota ${clientPayload.routeId} (Ordem: ${clientPayload.order}, Código: ${clientPayload.code}).`,
       });
-    } catch (err) {
-      console.warn("Gravado localmente:", err);
-    }
 
-    // Fecha o modal e exibe resposta visual imediata (Requisito 13)
-    setIsModalOpen(false);
-    setEditingClient(null);
-    setToast({
-      type: "success",
-      title: editingClient ? "Cliente Atualizado!" : "Cliente Cadastrado com Sucesso!",
-      message: `${clientPayload.name} salvo com código ${clientPayload.code}.`,
-    });
+      // Fecha o modal e exibe resposta visual explícita de gravação na nuvem
+      setIsModalOpen(false);
+      setEditingClient(null);
+      setToast({
+        type: "cloud_success",
+        title: editingClient ? "Cliente Atualizado na Nuvem!" : "Cliente Cadastrado na Nuvem!",
+        message: `${clientPayload.name} (${clientPayload.code}) foi gravado e sincronizado no Firestore com sucesso.`,
+        isCloud: true,
+      });
+    } catch (err: any) {
+      console.error("Erro ao salvar cliente no Firestore:", err);
+      // O formulário PERMANECE ABERTO para que o usuário não perca suas alterações!
+      setToast({
+        type: "cloud_error",
+        title: "Falha ao Salvar na Nuvem",
+        message: err?.message || "Não foi possível gravar os dados do cliente no banco de dados. Verifique a conexão.",
+        isCloud: true,
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleToggleStatus = async (cli: ClientItem) => {
     const updatedStatus: "ACTIVE" | "INACTIVE" =
       cli.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
     const updated = { ...cli, status: updatedStatus };
-    setClients((prev) => prev.map((c) => (c.id === cli.id ? updated : c)));
 
     try {
       await setDoc(
@@ -534,6 +548,8 @@ export default function LukeClientesPage() {
         { status: updatedStatus, updatedAt: new Date().toISOString() },
         { merge: true }
       );
+      setClients((prev) => prev.map((c) => (c.id === cli.id ? updated : c)));
+
       await logActivity(tenantId, {
         userName: "Administrador",
         userEmail: "admin@luke.com",
@@ -542,20 +558,38 @@ export default function LukeClientesPage() {
         entityId: cli.id,
         details: `Alterou status do cliente ${cli.name} para ${updatedStatus}.`,
       });
-    } catch (e) {}
 
-    setToast({
-      type: "info",
-      title: "Status Atualizado",
-      message: `${cli.name} agora está ${updatedStatus === "ACTIVE" ? "Ativo" : "Inativo"}.`,
-    });
+      setToast({
+        type: "cloud_success",
+        title: "Status Atualizado na Nuvem",
+        message: `${cli.name} agora está ${updatedStatus === "ACTIVE" ? "Ativo" : "Inativo"} no Firestore.`,
+        isCloud: true,
+      });
+    } catch (err: any) {
+      console.error("Erro ao atualizar status do cliente no Firestore:", err);
+      setToast({
+        type: "cloud_error",
+        title: "Erro ao Atualizar Status na Nuvem",
+        message: err?.message || "Não foi possível atualizar o status no banco de dados.",
+        isCloud: true,
+      });
+    }
   };
 
   const handleDelete = async (id: string, name: string) => {
     if (confirm(`Deseja realmente remover o cliente "${name}" do cadastro?`)) {
-      setClients((prev) => prev.filter((c) => c.id !== id));
       try {
-        await deleteDoc(doc(db, `tenants/${tenantId}/clients`, id));
+        await setDoc(
+          doc(db, `tenants/${tenantId}/clients`, id),
+          { deleted: true, status: "INACTIVE", updatedAt: new Date().toISOString() },
+          { merge: true }
+        );
+        try {
+          await deleteDoc(doc(db, `tenants/${tenantId}/clients`, id));
+        } catch (e) {}
+
+        setClients((prev) => prev.filter((c) => c.id !== id));
+
         await logActivity(tenantId, {
           userName: "Administrador",
           userEmail: "admin@luke.com",
@@ -564,13 +598,22 @@ export default function LukeClientesPage() {
           entityId: id,
           details: `Removeu o cliente "${name}" do cadastro.`,
         });
-      } catch (e) {}
 
-      setToast({
-        type: "info",
-        title: "Cliente Excluído",
-        message: `${name} foi removido do cadastro.`,
-      });
+        setToast({
+          type: "cloud_success",
+          title: "Cliente Excluído na Nuvem",
+          message: `${name} foi removido do banco de dados Firestore.`,
+          isCloud: true,
+        });
+      } catch (err: any) {
+        console.error("Erro ao excluir cliente no Firestore:", err);
+        setToast({
+          type: "cloud_error",
+          title: "Erro ao Excluir na Nuvem",
+          message: err?.message || "Não foi possível remover o cliente do banco de dados.",
+          isCloud: true,
+        });
+      }
     }
   };
 
@@ -596,7 +639,18 @@ export default function LukeClientesPage() {
           </p>
         </div>
 
-        <div className="flex items-center space-x-2 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          {/* Botão Sincronizar Catálogo Completo na Nuvem */}
+          <button
+            onClick={handleSyncAllClientsToCloud}
+            disabled={isSyncingAll}
+            className="flex items-center space-x-1.5 bg-brand-blue/30 text-brand-gold border border-brand-gold/30 hover:bg-brand-blue/50 px-3.5 py-2.5 rounded-xl font-bold transition shadow text-xs shrink-0 disabled:opacity-50"
+            title="Garantir que todos os 561 clientes estejam gravados na nuvem Firestore"
+          >
+            <CloudUpload size={16} className={isSyncingAll ? "animate-bounce" : ""} />
+            <span>{isSyncingAll ? `Sincronizando (${syncProgress}%)...` : "Sincronizar Catálogo na Nuvem"}</span>
+          </button>
+
           {/* Toggle Modo Privacidade */}
           <button
             onClick={togglePrivacy}
@@ -1253,9 +1307,20 @@ export default function LukeClientesPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 bg-brand-gold text-brand-black rounded-xl font-extrabold hover:bg-yellow-500 transition shadow-lg text-xs"
+                  disabled={isSaving}
+                  className="px-6 py-2.5 bg-brand-gold text-brand-black rounded-xl font-extrabold hover:bg-yellow-500 transition shadow-lg text-xs disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                 >
-                  Salvar Cliente
+                  {isSaving ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin text-brand-black" />
+                      <span>Gravando na nuvem...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Cloud size={14} className="text-brand-black" />
+                      <span>Salvar Cliente</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

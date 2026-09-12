@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore, getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
@@ -16,7 +16,15 @@ const firebaseConfig = {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+const databaseId = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_ID || "klirosales";
+
+let firestoreInstance;
+try {
+  firestoreInstance = initializeFirestore(app, { ignoreUndefinedProperties: true }, databaseId);
+} catch (e) {
+  firestoreInstance = getFirestore(app, databaseId);
+}
+export const db = firestoreInstance;
 export const storage = getStorage(app);
 
 export default app;

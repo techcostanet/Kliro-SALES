@@ -46,6 +46,8 @@ export const MASTER_ROUTES_CATALOG: RouteMaster[] = [
   { id: "g2", code: "G2", name: "Rota G2 - Grande BH Expansão 2", prefix: "G", defaultVendorName: "Alexandre", targetClientsCount: 16, estimatedRevenue: 3400, region: "Metropolitana", active: true },
   { id: "g3", code: "G3", name: "Rota G3 - Grande BH Expansão 3", prefix: "G", defaultVendorName: "Alexandre", targetClientsCount: 15, estimatedRevenue: 3100, region: "Metropolitana", active: true },
   { id: "g4", code: "G4", name: "Rota G4 - Grande BH Expansão 4", prefix: "G", defaultVendorName: "Alexandre", targetClientsCount: 14, estimatedRevenue: 3000, region: "Metropolitana", active: true },
+  { id: "y1", code: "Y1", name: "Rota Y1 - Atendimento Especial Centro/Norte", prefix: "Y", defaultVendorName: "Alisson", targetClientsCount: 18, estimatedRevenue: 4000, region: "Setor Y", active: true },
+  { id: "y2", code: "Y2", name: "Rota Y2 - Atendimento Especial Sul/Oeste", prefix: "Y", defaultVendorName: "Alisson", targetClientsCount: 18, estimatedRevenue: 4000, region: "Setor Y", active: true },
   { id: "y3", code: "Y3", name: "Rota Y3 - Atendimento Especial Norte", prefix: "Y", defaultVendorName: "Alisson", targetClientsCount: 16, estimatedRevenue: 3600, region: "Setor Y", active: true },
   { id: "y4", code: "Y4", name: "Rota Y4 - Atendimento Especial Sul", prefix: "Y", defaultVendorName: "Alisson", targetClientsCount: 15, estimatedRevenue: 3500, region: "Setor Y", active: true },
 
@@ -68,4 +70,110 @@ export interface ScheduledRouteEvent {
   completedVisits?: number;
   totalSales?: number;
   notes?: string;
+}
+
+/**
+ * Mescla rotas existentes no Firestore com o catálogo mestre.
+ * Garante que rotas padrão nunca sumam caso não estejam no Firestore,
+ * e que rotas customizadas salvas no Firestore tenham precedência.
+ */
+export function mergeRoutesWithCatalog(firestoreRoutes: RouteMaster[]): RouteMaster[] {
+  const map = new Map<string, RouteMaster>();
+
+  // 1. Carrega todas as rotas padrão
+  for (const master of MASTER_ROUTES_CATALOG) {
+    map.set(master.code.toUpperCase(), { ...master });
+  }
+
+  // 2. Sobrescreve com as rotas vindas do Firestore (ou adiciona novas rotas como Y1)
+  for (const r of firestoreRoutes) {
+    if (!r.code) continue;
+    const key = r.code.toUpperCase();
+    const existing = map.get(key);
+    map.set(key, {
+      id: r.id || existing?.id || `route-${key.toLowerCase()}`,
+      code: key,
+      name: r.name || existing?.name || `Rota ${key}`,
+      prefix: r.prefix || existing?.prefix || "OUTROS",
+      defaultVendorName: r.defaultVendorName || existing?.defaultVendorName || "Alisson",
+      targetClientsCount: Number(r.targetClientsCount ?? existing?.targetClientsCount ?? 20),
+      estimatedRevenue: Number(r.estimatedRevenue ?? existing?.estimatedRevenue ?? 4500),
+      region: r.region || existing?.region || "Geral",
+      active: r.active !== undefined ? r.active : (existing?.active ?? true),
+    });
+  }
+
+  return Array.from(map.values()).sort((a, b) => {
+    // Ordenação amigável: R primeiro, depois F, G, Y, ESPECIAL, OUTROS
+    const prefixOrder: Record<string, number> = { R: 1, F: 2, G: 3, Y: 4, ESPECIAL: 5, OUTROS: 6 };
+    const orderA = prefixOrder[a.prefix] || 99;
+    const orderB = prefixOrder[b.prefix] || 99;
+    if (orderA !== orderB) return orderA - orderB;
+    return a.code.localeCompare(b.code, undefined, { numeric: true });
+  });
+}
+
+/**
+ * Semeia todas as rotas do catálogo mestre no Firestore via batch write.
+ * Preserva rotas existentes usando merge: true.
+ */
+export async function seedAllDefaultRoutes(tenantId: string, db: any): Promise<RouteMaster[]> {
+  const { doc, writeBatch, collection, getDocs } = await import("firebase/firestore");
+  const batch = writeBatch(db);
+
+  // Busca rotas atuais do Firestore para não apagar nada
+  const snap = await getDocs(collection(db, `tenants/${tenantId}/routes`));
+  const existingMap = new Map<string, any>();
+  snap.forEach((d) => {
+    const data = d.data();
+    if (data.code) existingMap.set(data.code.toUpperCase(), { id: d.id, ...data });
+  });
+
+  for (const master of MASTER_ROUTES_CATALOG) {
+    const key = master.code.toUpperCase();
+    const current = existingMap.get(key);
+    const docId = current?.id || master.id;
+    const docRef = doc(db, `tenants/${tenantId}/routes`, docId);
+    
+    // Grava se não existe ou atualiza mantendo customizações
+    batch.set(docRef, {
+      ...master,
+      ...(current || {}),
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+  }
+
+  await batch.commit();
+
+  // Retorna a lista completa atualizada
+  const refreshedSnap = await getDocs(collection(db, `tenants/${tenantId}/routes`));
+  const loaded: RouteMaster[] = [];
+  refreshedSnap.forEach((d) => loaded.push({ id: d.id, ...d.data() } as RouteMaster));
+  return mergeRoutesWithCatalog(loaded);
+}
+
+/**
+ * Garante que o Firestore contenha as rotas padrão semeadas.
+ * Se a coleção estiver vazia ou com menos de 10 rotas, semeia automaticamente.
+ */
+export async function ensureRoutesSeeded(tenantId: string, db: any): Promise<RouteMaster[]> {
+  const { collection, getDocs } = await import("firebase/firestore");
+  try {
+    const snap = await getDocs(collection(db, `tenants/${tenantId}/routes`));
+    const firestoreRoutes: RouteMaster[] = [];
+    snap.forEach((d) => firestoreRoutes.push({ id: d.id, ...d.data() } as RouteMaster));
+
+    // Se estiver vazia ou quase vazia (ex: só tem 1 rota avulsa cadastrada como Y1), semeia o restante!
+    const masterCodes = new Set(MASTER_ROUTES_CATALOG.map((m) => m.code.toUpperCase()));
+    const presentMasterCount = firestoreRoutes.filter((r) => masterCodes.has(r.code?.toUpperCase())).length;
+
+    if (snap.empty || presentMasterCount < 10) {
+      return await seedAllDefaultRoutes(tenantId, db);
+    }
+
+    return mergeRoutesWithCatalog(firestoreRoutes);
+  } catch (err) {
+    console.warn("ensureRoutesSeeded fallback offline:", err);
+    return mergeRoutesWithCatalog([]);
+  }
 }

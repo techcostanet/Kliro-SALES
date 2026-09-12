@@ -27,9 +27,10 @@ import {
   ShieldAlert,
   SlidersHorizontal,
   ChevronDown,
+  Cloud,
 } from "lucide-react";
 import { collection, getDocs, doc, setDoc, deleteDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
 import initialCategories from "@/lib/financial_categories.json";
 import { usePrivacy } from "@/lib/privacyContext";
 import {
@@ -419,6 +420,7 @@ export default function LukeFinanceiroPage() {
 
   // Modais
   const [isPayableModalOpen, setIsPayableModalOpen] = useState(false);
+  const [isSavingPayable, setIsSavingPayable] = useState(false);
   const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false);
   const [selectedReceivable, setSelectedReceivable] = useState<ReceivableItem | null>(null);
   const [receivePaymentMethod, setReceivePaymentMethod] = useState<"PIX" | "CASH" | "CARD" | "BOLETO">("PIX");
@@ -614,35 +616,41 @@ export default function LukeFinanceiroPage() {
       });
     }
 
-    setPayables((prev) => [...itemsToCreate, ...prev]);
-
+    setIsSavingPayable(true);
     try {
       for (const item of itemsToCreate) {
         await setDoc(doc(db, `tenants/${tenantId}/payables`, item.id), {
           ...item,
-          createdAt: new Date(),
+          createdAt: new Date().toISOString(),
         });
       }
-    } catch (e) {}
+      setPayables((prev) => [...itemsToCreate, ...prev]);
+      setSyncMessage(`✅ ${itemsToCreate.length} lançamento(s) de despesa gravado(s) na nuvem Firestore!`);
+      setTimeout(() => setSyncMessage(null), 4000);
 
-    setIsPayableModalOpen(false);
-    setPayableForm({
-      description: "",
-      categoryId: "CAT-001",
-      supplier: "",
-      amount: 100,
-      dueDate: todayStr,
-      competence: `${selectedMonth}/${selectedYear}`,
-      notes: "",
-      isAlreadyPaid: false,
-      paymentDate: todayStr,
-      paymentMethod: "PIX",
-      recurrence: false,
-      recurrenceMonths: 12,
-    });
-    setCategorySearch("");
-    setSyncMessage(`✅ ${itemsToCreate.length} lançamento(s) de despesa cadastrado(s) com sucesso!`);
-    setTimeout(() => setSyncMessage(null), 4000);
+      // Fecha o modal apenas se gravado com sucesso
+      setIsPayableModalOpen(false);
+      setPayableForm({
+        description: "",
+        categoryId: "CAT-001",
+        supplier: "",
+        amount: 100,
+        dueDate: todayStr,
+        competence: `${selectedMonth}/${selectedYear}`,
+        notes: "",
+        isAlreadyPaid: false,
+        paymentDate: todayStr,
+        paymentMethod: "PIX",
+        recurrence: false,
+        recurrenceMonths: 12,
+      });
+      setCategorySearch("");
+    } catch (err: any) {
+      console.error("Erro ao salvar despesas no Firestore:", err);
+      setSyncMessage(`❌ Erro ao salvar despesa na nuvem: ${err?.message || "Erro de conexão"}`);
+    } finally {
+      setIsSavingPayable(false);
+    }
   };
 
   // Dar baixa em conta a pagar
@@ -654,18 +662,19 @@ export default function LukeFinanceiroPage() {
       paymentMethod: "PIX",
     };
 
-    setPayables((prev) => prev.map((p) => (p.id === item.id ? updated : p)));
-
     try {
       await setDoc(
         doc(db, `tenants/${tenantId}/payables`, item.id),
-        { status: "PAID", paymentDate: todayStr, paymentMethod: "PIX", updatedAt: new Date() },
+        { status: "PAID", paymentDate: todayStr, paymentMethod: "PIX", updatedAt: new Date().toISOString() },
         { merge: true }
       );
-    } catch (e) {}
-
-    setSyncMessage(`✅ Pagamento de ${formatValue(item.amount)} confirmado!`);
-    setTimeout(() => setSyncMessage(null), 4000);
+      setPayables((prev) => prev.map((p) => (p.id === item.id ? updated : p)));
+      setSyncMessage(`✅ Pagamento de ${formatValue(item.amount)} confirmado!`);
+      setTimeout(() => setSyncMessage(null), 4000);
+    } catch (err: any) {
+      console.error("Erro ao dar baixa em despesa no Firestore:", err);
+      setSyncMessage(`❌ Erro ao registrar pagamento: ${err?.message || "Erro de conexão"}`);
+    }
   };
 
   // Abrir Modal de Baixa de P.A.
@@ -688,10 +697,6 @@ export default function LukeFinanceiroPage() {
       paymentMethod: receivePaymentMethod,
     };
 
-    setReceivables((prev) =>
-      prev.map((r) => (r.id === selectedReceivable.id ? updated : r))
-    );
-
     try {
       await setDoc(
         doc(db, `tenants/${tenantId}/receivables`, selectedReceivable.id),
@@ -699,7 +704,7 @@ export default function LukeFinanceiroPage() {
           status: "RECEIVED",
           receivedDate: receiveDate,
           paymentMethod: receivePaymentMethod,
-          updatedAt: new Date(),
+          updatedAt: new Date().toISOString(),
         },
         { merge: true }
       );
@@ -715,74 +720,77 @@ export default function LukeFinanceiroPage() {
         status: "CONCILIADO",
         source: "RECEBIMENTO_PA",
         originReceivableId: selectedReceivable.id,
-        createdAt: new Date(),
+        createdAt: new Date().toISOString(),
       });
-    } catch (e) {}
+
+      setReceivables((prev) =>
+        prev.map((r) => (r.id === selectedReceivable.id ? updated : r))
+      );
+      setSyncMessage(`✅ Recebimento de ${formatValue(updated.amount)} registrado e lançado no Caixa!`);
+      setTimeout(() => setSyncMessage(null), 4000);
+    } catch (err: any) {
+      console.error("Erro ao registrar recebimento no Firestore:", err);
+      setSyncMessage(`❌ Erro ao registrar recebimento: ${err?.message || "Erro de conexão"}`);
+    }
 
     setIsReceiveModalOpen(false);
     setSelectedReceivable(null);
-    setSyncMessage(`✅ Recebimento de ${formatValue(updated.amount)} registrado e lançado no Caixa!`);
-    setTimeout(() => setSyncMessage(null), 4000);
   };
 
   // Abrir Modal de Estorno de Segurança (Restrito a admin@luke.com)
   const handleOpenReversalModal = (type: "PAYABLE" | "RECEIVABLE", item: any) => {
     setReversalTarget({ type, item });
     setReversalReason("");
-    setReversalError(null);
-    setReversalAdminEmail("admin@luke.com");
+    setReversalAdminEmail(auth.currentUser?.email || "");
     setIsReversalModalOpen(true);
   };
 
-  // Confirmar Estorno
+  // Executar Estorno no Firestore
   const handleConfirmReversal = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!reversalTarget) return;
+    if (!reversalTarget || !reversalReason.trim()) return;
 
     if (reversalAdminEmail.trim().toLowerCase() !== "admin@luke.com") {
-      setReversalError("Acesso negado. Apenas o administrador autorizado (admin@luke.com) pode estornar baixas.");
-      return;
-    }
-
-    if (!reversalReason.trim() || reversalReason.trim().length < 5) {
-      setReversalError("A justificativa/observação é obrigatória (mínimo 5 caracteres) para auditoria.");
+      alert("Apenas administradores gerais (admin@luke.com) possuem autorização para estornar baixas.");
       return;
     }
 
     const auditEntry = `Estorno efetuado por ${reversalAdminEmail.trim()} em ${formatDateTimeBR(new Date())}. Motivo: ${reversalReason.trim()}`;
 
-    if (reversalTarget.type === "PAYABLE") {
-      const p = reversalTarget.item as PayableItem;
-      const updated: PayableItem = {
-        ...p,
-        status: p.dueDate < todayStr ? "OVERDUE" : "PENDING",
-        paymentDate: undefined,
-        paymentMethod: undefined,
-        auditTrail: [...(p.auditTrail || []), auditEntry],
-      };
-      setPayables((prev) => prev.map((item) => (item.id === p.id ? updated : item)));
-      try {
+    try {
+      if (reversalTarget.type === "PAYABLE") {
+        const p = reversalTarget.item as PayableItem;
+        const updated: PayableItem = {
+          ...p,
+          status: p.dueDate < todayStr ? "OVERDUE" : "PENDING",
+          paymentDate: undefined,
+          paymentMethod: undefined,
+          auditTrail: [...(p.auditTrail || []), auditEntry],
+        };
         await setDoc(doc(db, `tenants/${tenantId}/payables`, p.id), updated, { merge: true });
-      } catch (err) {}
-    } else {
-      const r = reversalTarget.item as ReceivableItem;
-      const updated: ReceivableItem = {
-        ...r,
-        status: r.scheduledDate < todayStr ? "OVERDUE" : "PENDING",
-        receivedDate: undefined,
-        paymentMethod: "PA",
-        auditTrail: [...(r.auditTrail || []), auditEntry],
-      };
-      setReceivables((prev) => prev.map((item) => (item.id === r.id ? updated : item)));
-      try {
+        setPayables((prev) => prev.map((item) => (item.id === p.id ? updated : item)));
+      } else {
+        const r = reversalTarget.item as ReceivableItem;
+        const updated: ReceivableItem = {
+          ...r,
+          status: r.scheduledDate < todayStr ? "OVERDUE" : "PENDING",
+          receivedDate: undefined,
+          paymentMethod: "PA",
+          auditTrail: [...(r.auditTrail || []), auditEntry],
+        };
         await setDoc(doc(db, `tenants/${tenantId}/receivables`, r.id), updated, { merge: true });
-      } catch (err) {}
+        setReceivables((prev) => prev.map((item) => (item.id === r.id ? updated : item)));
+      }
+
+      setSyncMessage("🔄 Baixa estornada com sucesso e registrada na auditoria!");
+      setTimeout(() => setSyncMessage(null), 4000);
+    } catch (err: any) {
+      console.error("Erro ao estornar no Firestore:", err);
+      setSyncMessage(`❌ Erro ao processar estorno: ${err?.message || "Erro de conexão"}`);
     }
 
     setIsReversalModalOpen(false);
     setReversalTarget(null);
-    setSyncMessage("🔄 Baixa estornada com sucesso e registrada na auditoria!");
-    setTimeout(() => setSyncMessage(null), 4000);
   };
 
   // Filtragem de Contas a Pagar com Seletor Temporal
@@ -1811,9 +1819,20 @@ export default function LukeFinanceiroPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-brand-gold text-brand-black rounded-lg font-bold hover:bg-yellow-500 transition shadow-lg text-sm"
+                  disabled={isSavingPayable}
+                  className="px-6 py-2 bg-brand-gold text-brand-black rounded-lg font-bold hover:bg-yellow-500 transition shadow-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                 >
-                  Salvar Despesa
+                  {isSavingPayable ? (
+                    <>
+                      <RefreshCw size={15} className="animate-spin text-brand-black" />
+                      <span>Gravando na nuvem...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Cloud size={15} className="text-brand-black" />
+                      <span>Salvar Despesa</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

@@ -20,6 +20,7 @@ import {
   EyeOff,
   Palette,
   Calendar,
+  Cloud,
 } from "lucide-react";
 import { collection, getDocs, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -131,6 +132,7 @@ export default function LukeVendedoresPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRoleFilter, setSelectedRoleFilter] = useState("ALL");
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
     if (typeof window !== "undefined") {
@@ -286,19 +288,21 @@ export default function LukeVendedoresPage() {
       notes: formData.notes || "",
     };
 
-    if (editingVendor) {
-      setVendors((prev) =>
-        prev.map((v) => (v.id === editingVendor.id ? payload : v))
-      );
-    } else {
-      setVendors((prev) => [...prev, payload]);
-    }
-
+    setIsSaving(true);
     try {
       await setDoc(doc(db, `tenants/${tenantId}/users`, payload.id), {
         ...payload,
         updatedAt: new Date().toISOString(),
       });
+
+      if (editingVendor) {
+        setVendors((prev) =>
+          prev.map((v) => (v.id === editingVendor.id ? payload : v))
+        );
+      } else {
+        setVendors((prev) => [...prev, payload]);
+      }
+
       await logActivity(tenantId, {
         userName: "Administrador",
         userEmail: "admin@luke.com",
@@ -307,24 +311,32 @@ export default function LukeVendedoresPage() {
         entityId: payload.id,
         details: `${editingVendor ? "Editou" : "Cadastrou"} vendedor ${payload.name} (${payload.role}).`,
       });
-    } catch (err) {
-      console.warn("Gravado localmente:", err);
-    }
 
-    setIsModalOpen(false);
-    setEditingVendor(null);
-    setToast({
-      type: "success",
-      title: editingVendor ? "Vendedor Atualizado!" : "Vendedor Cadastrado!",
-      message: `${payload.name} foi salvo com sucesso.`,
-    });
+      setIsModalOpen(false);
+      setEditingVendor(null);
+      setToast({
+        type: "cloud_success",
+        title: editingVendor ? "Vendedor Atualizado na Nuvem!" : "Vendedor Cadastrado na Nuvem!",
+        message: `${payload.name} foi salvo e sincronizado no Firestore com sucesso.`,
+        isCloud: true,
+      });
+    } catch (err: any) {
+      console.error("Erro ao salvar vendedor no Firestore:", err);
+      setToast({
+        type: "cloud_error",
+        title: "Falha ao Salvar na Nuvem",
+        message: err?.message || "Não foi possível gravar o vendedor no banco de dados.",
+        isCloud: true,
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleToggleStatus = async (v: VendorItem) => {
     const updatedStatus: "ACTIVE" | "INACTIVE" =
       v.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
     const updated = { ...v, status: updatedStatus };
-    setVendors((prev) => prev.map((item) => (item.id === v.id ? updated : item)));
 
     try {
       await setDoc(
@@ -332,29 +344,41 @@ export default function LukeVendedoresPage() {
         { status: updatedStatus, updatedAt: new Date().toISOString() },
         { merge: true }
       );
+      setVendors((prev) => prev.map((item) => (item.id === v.id ? updated : item)));
+
       await logActivity(tenantId, {
         userName: "Administrador",
         userEmail: "admin@luke.com",
         action: "USUARIO_EDITADO",
         entity: "USUARIO",
         entityId: v.id,
-        details: `Alterou status de ${v.name} para ${updatedStatus}.`,
+        details: `Alterou status do vendedor ${v.name} para ${updatedStatus}.`,
       });
-    } catch (e) {}
 
-    setToast({
-      type: "info",
-      title: "Status Atualizado",
-      message: `${v.name} agora está ${updatedStatus === "ACTIVE" ? "Ativo" : "Inativo"}.`,
-    });
+      setToast({
+        type: "cloud_success",
+        title: "Status Atualizado na Nuvem",
+        message: `${v.name} agora está ${updatedStatus === "ACTIVE" ? "Ativo" : "Inativo"} no Firestore.`,
+        isCloud: true,
+      });
+    } catch (err: any) {
+      console.error("Erro ao atualizar status do vendedor no Firestore:", err);
+      setToast({
+        type: "cloud_error",
+        title: "Erro ao Atualizar na Nuvem",
+        message: err?.message || "Não foi possível atualizar o status no banco de dados.",
+        isCloud: true,
+      });
+    }
   };
 
   const handleDelete = async (id: string) => {
     const found = vendors.find((v) => v.id === id);
     if (confirm(`Deseja realmente remover ${found?.name || "este integrante"} da equipe?`)) {
-      setVendors((prev) => prev.filter((v) => v.id !== id));
       try {
         await deleteDoc(doc(db, `tenants/${tenantId}/users`, id));
+        setVendors((prev) => prev.filter((v) => v.id !== id));
+
         await logActivity(tenantId, {
           userName: "Administrador",
           userEmail: "admin@luke.com",
@@ -363,13 +387,20 @@ export default function LukeVendedoresPage() {
           entityId: id,
           details: `Removeu o usuário/vendedor ${found?.name || id} do sistema.`,
         });
-      } catch (e) {}
 
-      setToast({
-        type: "info",
-        title: "Vendedor Removido",
-        message: `${found?.name || "Integrante"} foi excluído.`,
-      });
+        setToast({
+          type: "info",
+          title: "Vendedor Removido",
+          message: `${found?.name || "Integrante"} foi excluído.`,
+        });
+      } catch (err: any) {
+        console.error("Erro ao excluir vendedor no Firestore:", err);
+        setToast({
+          type: "error",
+          title: "Erro ao Excluir",
+          message: err?.message || "Não foi possível remover o vendedor do banco de dados.",
+        });
+      }
     }
   };
 
@@ -943,9 +974,20 @@ export default function LukeVendedoresPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-brand-gold text-brand-black rounded-lg font-bold hover:bg-yellow-500 transition shadow-lg text-sm"
+                  disabled={isSaving}
+                  className="px-6 py-2 bg-brand-gold text-brand-black rounded-lg font-bold hover:bg-yellow-500 transition shadow-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                 >
-                  Salvar Vendedor
+                  {isSaving ? (
+                    <>
+                      <RefreshCw size={15} className="animate-spin text-brand-black" />
+                      <span>Gravando na nuvem...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Cloud size={15} className="text-brand-black" />
+                      <span>Salvar Vendedor</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

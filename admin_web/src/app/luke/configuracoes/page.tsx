@@ -22,10 +22,12 @@ import {
   Check,
   Building2,
   RefreshCw,
+  RotateCcw,
   Phone,
   Mail,
   UserCheck,
   AlertCircle,
+  Cloud,
 } from "lucide-react";
 import {
   collection,
@@ -48,7 +50,13 @@ import {
 import { logActivity, ActivityLogItem } from "@/lib/activityLogger";
 import { formatDateTimeBR, maskPhone, formatNumberBR } from "@/lib/formatters";
 import ToastFeedback, { ToastMessage } from "@/components/ToastFeedback";
-import { MASTER_ROUTES_CATALOG, RouteMaster } from "@/lib/routesCatalog";
+import {
+  MASTER_ROUTES_CATALOG,
+  RouteMaster,
+  ensureRoutesSeeded,
+  seedAllDefaultRoutes,
+  mergeRoutesWithCatalog,
+} from "@/lib/routesCatalog";
 
 // ==========================================
 // INTERFACES
@@ -81,7 +89,7 @@ export interface ManagedRouteItem {
   code: string;
   name: string;
   prefix: "R" | "F" | "G" | "Y" | "ESPECIAL" | "OUTROS";
-  defaultVendorName: string;
+  defaultVendorName?: string;
   targetClientsCount: number;
   estimatedRevenue: number;
   region: string;
@@ -140,6 +148,7 @@ export default function LukeConfiguracoesPage() {
 
   // Toast State
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // ----------------------------------------------------
   // TAB 1: GESTÃO DE USUÁRIOS & PERMISSÕES
@@ -199,6 +208,7 @@ export default function LukeConfiguracoesPage() {
     region: "",
     active: true,
   });
+  const [restoringRoutes, setRestoringRoutes] = useState(false);
 
   // ----------------------------------------------------
   // TAB 4: LOGS DE ATIVIDADES DO SISTEMA
@@ -233,14 +243,10 @@ export default function LukeConfiguracoesPage() {
         setPaymentTerms(loadedPt);
       }
 
-      // 3. Rotas
-      const routesSnap = await getDocs(collection(db, `tenants/${tenantId}/routes`));
-      if (!routesSnap.empty) {
-        const loadedRoutes: ManagedRouteItem[] = [];
-        routesSnap.forEach((d) => {
-          loadedRoutes.push({ id: d.id, ...d.data() } as ManagedRouteItem);
-        });
-        setRoutes(loadedRoutes);
+      // 3. Rotas: Garante auto-seeding do catálogo mestre e preservação total de rotas customizadas
+      const fullRoutes = await ensureRoutesSeeded(tenantId, db);
+      if (fullRoutes && fullRoutes.length > 0) {
+        setRoutes(fullRoutes);
       }
 
       // 4. Logs
@@ -344,14 +350,16 @@ export default function LukeConfiguracoesPage() {
       createdAt: editingUser?.createdAt || new Date().toISOString(),
     };
 
-    if (editingUser) {
-      setUsers((prev) => prev.map((u) => (u.id === editingUser.id ? userPayload : u)));
-    } else {
-      setUsers((prev) => [userPayload, ...prev]);
-    }
-
+    setIsSaving(true);
     try {
       await setDoc(doc(db, `tenants/${tenantId}/users`, userId), userPayload);
+
+      if (editingUser) {
+        setUsers((prev) => prev.map((u) => (u.id === editingUser.id ? userPayload : u)));
+      } else {
+        setUsers((prev) => [userPayload, ...prev]);
+      }
+
       await logActivity(tenantId, {
         userName: "Administrador",
         userEmail: "admin@luke.com",
@@ -360,24 +368,33 @@ export default function LukeConfiguracoesPage() {
         entityId: userId,
         details: `${editingUser ? "Editou" : "Cadastrou"} usuário ${userPayload.name} (${userPayload.role}) com permissões personalizadas.`,
       });
-    } catch (err) {
-      console.warn("Salvo localmente:", err);
-    }
 
-    setUserModalOpen(false);
-    setToast({
-      type: "success",
-      title: editingUser ? "Usuário Atualizado!" : "Usuário Cadastrado!",
-      message: `${userPayload.name} foi salvo com sucesso.`,
-    });
-    fetchLogs();
+      setUserModalOpen(false);
+      setToast({
+        type: "cloud_success",
+        title: editingUser ? "Usuário Atualizado na Nuvem!" : "Usuário Cadastrado na Nuvem!",
+        message: `${userPayload.name} foi salvo e sincronizado no Firestore com sucesso.`,
+        isCloud: true,
+      });
+      fetchLogs();
+    } catch (err: any) {
+      console.error("Erro ao salvar usuário no Firestore:", err);
+      setToast({
+        type: "cloud_error",
+        title: "Falha ao Salvar Usuário na Nuvem",
+        message: err?.message || "Não foi possível gravar o usuário no banco de dados.",
+        isCloud: true,
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleDeleteUser = async (usr: SystemUserItem) => {
     if (!confirm(`Deseja realmente excluir o usuário "${usr.name}"?`)) return;
-    setUsers((prev) => prev.filter((u) => u.id !== usr.id));
     try {
       await deleteDoc(doc(db, `tenants/${tenantId}/users`, usr.id));
+      setUsers((prev) => prev.filter((u) => u.id !== usr.id));
       await logActivity(tenantId, {
         userName: "Administrador",
         userEmail: "admin@luke.com",
@@ -386,13 +403,20 @@ export default function LukeConfiguracoesPage() {
         entityId: usr.id,
         details: `Excluiu o usuário ${usr.name} do sistema.`,
       });
-    } catch (e) {}
-    setToast({
-      type: "info",
-      title: "Usuário Excluído",
-      message: `${usr.name} foi removido do cadastro.`,
-    });
-    fetchLogs();
+      setToast({
+        type: "info",
+        title: "Usuário Excluído",
+        message: `${usr.name} foi removido do cadastro.`,
+      });
+      fetchLogs();
+    } catch (err: any) {
+      console.error("Erro ao excluir usuário no Firestore:", err);
+      setToast({
+        type: "error",
+        title: "Erro ao Excluir",
+        message: err?.message || "Não foi possível remover o usuário do banco de dados.",
+      });
+    }
   };
 
   // ----------------------------------------------------
@@ -430,14 +454,16 @@ export default function LukeConfiguracoesPage() {
       createdAt: editingPt?.createdAt || new Date().toISOString(),
     };
 
-    if (editingPt) {
-      setPaymentTerms((prev) => prev.map((p) => (p.id === editingPt.id ? payload : p)));
-    } else {
-      setPaymentTerms((prev) => [...prev, payload]);
-    }
-
+    setIsSaving(true);
     try {
       await setDoc(doc(db, `tenants/${tenantId}/payment_terms`, ptId), payload);
+
+      if (editingPt) {
+        setPaymentTerms((prev) => prev.map((p) => (p.id === editingPt.id ? payload : p)));
+      } else {
+        setPaymentTerms((prev) => [...prev, payload]);
+      }
+
       await logActivity(tenantId, {
         userName: "Administrador",
         userEmail: "admin@luke.com",
@@ -446,22 +472,33 @@ export default function LukeConfiguracoesPage() {
         entityId: ptId,
         details: `${editingPt ? "Editou" : "Criou"} condição de pagamento "${payload.name}" (${payload.type}).`,
       });
-    } catch (err) {}
 
-    setPtModalOpen(false);
-    setToast({
-      type: "success",
-      title: editingPt ? "Condição Atualizada!" : "Condição Criada!",
-      message: `"${payload.name}" foi salva com sucesso.`,
-    });
-    fetchLogs();
+      setPtModalOpen(false);
+      setToast({
+        type: "cloud_success",
+        title: editingPt ? "Condição Atualizada na Nuvem!" : "Condição Criada na Nuvem!",
+        message: `"${payload.name}" foi salva e sincronizada no Firestore com sucesso.`,
+        isCloud: true,
+      });
+      fetchLogs();
+    } catch (err: any) {
+      console.error("Erro ao salvar condição de pagamento:", err);
+      setToast({
+        type: "cloud_error",
+        title: "Falha ao Salvar na Nuvem",
+        message: err?.message || "Não foi possível gravar a condição no banco de dados.",
+        isCloud: true,
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleDeletePt = async (pt: PaymentTermItem) => {
     if (!confirm(`Deseja realmente excluir a condição "${pt.name}"?`)) return;
-    setPaymentTerms((prev) => prev.filter((p) => p.id !== pt.id));
     try {
       await deleteDoc(doc(db, `tenants/${tenantId}/payment_terms`, pt.id));
+      setPaymentTerms((prev) => prev.filter((p) => p.id !== pt.id));
       await logActivity(tenantId, {
         userName: "Administrador",
         userEmail: "admin@luke.com",
@@ -470,13 +507,21 @@ export default function LukeConfiguracoesPage() {
         entityId: pt.id,
         details: `Excluiu a condição de pagamento "${pt.name}".`,
       });
-    } catch (e) {}
-    setToast({
-      type: "info",
-      title: "Condição Excluída",
-      message: `"${pt.name}" foi removida.`,
-    });
-    fetchLogs();
+      setToast({
+        type: "cloud_success",
+        title: "Condição Excluída da Nuvem",
+        message: `"${pt.name}" foi removida do banco de dados Firestore.`,
+        isCloud: true,
+      });
+      fetchLogs();
+    } catch (err: any) {
+      setToast({
+        type: "cloud_error",
+        title: "Erro ao Excluir na Nuvem",
+        message: err?.message || "Não foi possível remover a condição.",
+        isCloud: true,
+      });
+    }
   };
 
   // ----------------------------------------------------
@@ -522,14 +567,19 @@ export default function LukeConfiguracoesPage() {
       active: routeFormData.active ?? true,
     };
 
-    if (editingRoute) {
-      setRoutes((prev) => prev.map((r) => (r.id === editingRoute.id ? payload : r)));
-    } else {
-      setRoutes((prev) => [...prev, payload]);
-    }
-
+    setIsSaving(true);
     try {
-      await setDoc(doc(db, `tenants/${tenantId}/routes`, routeId), payload);
+      await setDoc(doc(db, `tenants/${tenantId}/routes`, routeId), payload, { merge: true });
+
+      if (editingRoute) {
+        setRoutes((prev) => prev.map((r) => (r.id === editingRoute.id ? payload : r)));
+      } else {
+        setRoutes((prev) => {
+          const withoutCurrent = prev.filter((r) => r.id !== payload.id && r.code !== payload.code);
+          return [...withoutCurrent, payload].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+        });
+      }
+
       await logActivity(tenantId, {
         userName: "Administrador",
         userEmail: "admin@luke.com",
@@ -538,22 +588,70 @@ export default function LukeConfiguracoesPage() {
         entityId: routeId,
         details: `${editingRoute ? "Editou" : "Cadastrou nova"} rota ${payload.code} - ${payload.name} (Vendedor: ${payload.defaultVendorName}).`,
       });
-    } catch (e) {}
 
-    setRouteModalOpen(false);
-    setToast({
-      type: "success",
-      title: editingRoute ? "Rota Atualizada!" : "Nova Rota Cadastrada!",
-      message: `${payload.code} - ${payload.name} foi salva com sucesso.`,
-    });
-    fetchLogs();
+      setRouteModalOpen(false);
+      setToast({
+        type: "cloud_success",
+        title: editingRoute ? "Rota Atualizada na Nuvem!" : "Nova Rota Cadastrada na Nuvem!",
+        message: `${payload.code} - ${payload.name} foi salva e sincronizada no Firestore com sucesso.`,
+        isCloud: true,
+      });
+      fetchLogs();
+    } catch (err: any) {
+      console.error("Erro ao salvar rota no Firestore:", err);
+      setToast({
+        type: "cloud_error",
+        title: "Falha ao Salvar Rota na Nuvem",
+        message: err?.message || "Não foi possível persistir a rota no banco de dados.",
+        isCloud: true,
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleRestoreDefaultRoutes = async () => {
+    if (
+      !confirm(
+        "Deseja restaurar e sincronizar o catálogo padrão de rotas no Firestore?\n\nIsso garantirá que todas as rotas fixas padrão estejam salvas no banco. As rotas customizadas que você cadastrou continuarão salvas."
+      )
+    ) {
+      return;
+    }
+    try {
+      setRestoringRoutes(true);
+      const synced = await seedAllDefaultRoutes(tenantId, db);
+      setRoutes(synced);
+      setToast({
+        type: "success",
+        title: "Catálogo Sincronizado!",
+        message: `${synced.length} rotas ativas sincronizadas no Firestore com sucesso.`,
+      });
+      await logActivity(tenantId, {
+        userName: "Administrador",
+        userEmail: "admin@luke.com",
+        action: "ROTA_EDITADA",
+        entity: "ROTA",
+        entityId: "sync-catalog",
+        details: "Restaurou/sincronizou catálogo mestre de rotas no Firestore.",
+      });
+      fetchLogs();
+    } catch (err: any) {
+      setToast({
+        type: "error",
+        title: "Erro na Sincronização",
+        message: err?.message || "Não foi possível sincronizar as rotas.",
+      });
+    } finally {
+      setRestoringRoutes(false);
+    }
   };
 
   const handleDeleteRoute = async (rt: ManagedRouteItem) => {
     if (!confirm(`Deseja realmente excluir a rota "${rt.code} - ${rt.name}"?`)) return;
-    setRoutes((prev) => prev.filter((r) => r.id !== rt.id));
     try {
       await deleteDoc(doc(db, `tenants/${tenantId}/routes`, rt.id));
+      setRoutes((prev) => prev.filter((r) => r.id !== rt.id));
       await logActivity(tenantId, {
         userName: "Administrador",
         userEmail: "admin@luke.com",
@@ -562,13 +660,20 @@ export default function LukeConfiguracoesPage() {
         entityId: rt.id,
         details: `Excluiu a rota ${rt.code} - ${rt.name} do sistema.`,
       });
-    } catch (e) {}
-    setToast({
-      type: "info",
-      title: "Rota Excluída",
-      message: `A rota ${rt.code} foi removida.`,
-    });
-    fetchLogs();
+      setToast({
+        type: "info",
+        title: "Rota Excluída",
+        message: `A rota ${rt.code} foi removida.`,
+      });
+      fetchLogs();
+    } catch (err: any) {
+      console.error("Erro ao excluir rota no Firestore:", err);
+      setToast({
+        type: "error",
+        title: "Erro ao Excluir",
+        message: err?.message || "Não foi possível remover a rota do banco de dados.",
+      });
+    }
   };
 
   // ----------------------------------------------------
@@ -878,13 +983,25 @@ export default function LukeConfiguracoesPage() {
                 Criação de novas rotas, edição de nomenclaturas, vinculação de vendedores, inativação e exclusão.
               </p>
             </div>
-            <button
-              onClick={() => handleOpenRouteModal()}
-              className="flex items-center space-x-1.5 bg-brand-gold text-brand-black px-4 py-2 rounded-xl text-xs font-black hover:bg-yellow-500 transition shadow-lg shrink-0"
-            >
-              <Plus size={15} />
-              <span>Nova Rota</span>
-            </button>
+            <div className="flex items-center space-x-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleRestoreDefaultRoutes}
+                disabled={restoringRoutes}
+                title="Sincroniza e restaura todas as rotas fixas padrão no Firestore, preservando as customizadas"
+                className="flex items-center space-x-1.5 bg-brand-blue/30 text-brand-offwhite border border-brand-blue/50 hover:bg-brand-blue/50 px-3.5 py-2 rounded-xl text-xs font-bold transition disabled:opacity-50"
+              >
+                <RotateCcw size={14} className={restoringRoutes ? "animate-spin text-brand-gold" : "text-brand-offwhite/70"} />
+                <span>{restoringRoutes ? "Sincronizando..." : "Restaurar Catálogo Padrão"}</span>
+              </button>
+              <button
+                onClick={() => handleOpenRouteModal()}
+                className="flex items-center space-x-1.5 bg-brand-gold text-brand-black px-4 py-2 rounded-xl text-xs font-black hover:bg-yellow-500 transition shadow-lg shrink-0"
+              >
+                <Plus size={15} />
+                <span>Nova Rota</span>
+              </button>
+            </div>
           </div>
 
           <div className="bg-brand-graphite rounded-xl border border-brand-blue/30 overflow-hidden shadow-xl">
@@ -1236,9 +1353,20 @@ export default function LukeConfiguracoesPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 bg-brand-gold text-brand-black font-extrabold text-xs rounded-xl hover:bg-yellow-500 transition shadow-lg"
+                  disabled={isSaving}
+                  className="px-6 py-2.5 bg-brand-gold text-brand-black font-extrabold text-xs rounded-xl hover:bg-yellow-500 transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
                 >
-                  Salvar Usuário & Permissões
+                  {isSaving ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin text-brand-black" />
+                      <span>Gravando na nuvem...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Cloud size={14} />
+                      <span>Salvar Usuário & Permissões</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
@@ -1337,9 +1465,20 @@ export default function LukeConfiguracoesPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-brand-gold text-brand-black font-extrabold text-xs rounded-xl hover:bg-yellow-500 transition shadow-lg"
+                  disabled={isSaving}
+                  className="px-5 py-2 bg-brand-gold text-brand-black font-extrabold text-xs rounded-xl hover:bg-yellow-500 transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
                 >
-                  Salvar Condição
+                  {isSaving ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin text-brand-black" />
+                      <span>Gravando na nuvem...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Cloud size={14} />
+                      <span>Salvar Condição</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
@@ -1483,9 +1622,20 @@ export default function LukeConfiguracoesPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-brand-gold text-brand-black font-extrabold text-xs rounded-xl hover:bg-yellow-500 transition shadow-lg"
+                  disabled={isSaving}
+                  className="px-5 py-2 bg-brand-gold text-brand-black font-extrabold text-xs rounded-xl hover:bg-yellow-500 transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
                 >
-                  Salvar Rota
+                  {isSaving ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin text-brand-black" />
+                      <span>Gravando na nuvem...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Cloud size={14} />
+                      <span>Salvar Rota</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

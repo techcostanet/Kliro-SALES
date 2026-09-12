@@ -6,6 +6,7 @@ import { doc, setDoc, writeBatch } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 import initialProducts from "@/lib/products_catalog.json";
+import { seedAllDefaultRoutes } from "@/lib/routesCatalog";
 
 export default function SeedPage() {
   const [loading, setLoading] = useState(false);
@@ -75,12 +76,21 @@ export default function SeedPage() {
       }
       await batch.commit();
 
-      // 6. Roteamento de usuário global
+      // 6. Cadastrar todas as Rotas Oficiais no Firestore
+      setMessage("Gravando rotas oficiais no catálogo Firestore...");
+      await seedAllDefaultRoutes(tenantId, db);
+
+      // 7. Cadastrar todos os 561 Clientes no Firestore
+      setMessage("Gravando catálogo de 561 clientes no Firestore...");
+      const { seedAllDefaultClients } = await import("@/lib/clientsCatalog");
+      await seedAllDefaultClients(tenantId, db);
+
+      // 8. Roteamento de usuário global
       await setDoc(doc(db, "user_mappings", user.uid), {
         tenantId: tenantId,
       });
 
-      setMessage(`✅ Sucesso! Setup concluído com ${initialProducts.length} produtos, equipe comercial e estrutura pronta.`);
+      setMessage(`✅ Sucesso! Setup concluído com produtos, equipe comercial, rotas e estrutura pronta.`);
 
       // Redireciona para o login após 2 segundos
       setTimeout(() => {
