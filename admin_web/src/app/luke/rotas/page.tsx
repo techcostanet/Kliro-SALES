@@ -33,8 +33,9 @@ import {
   Printer,
   Cloud,
 } from "lucide-react";
-import { collection, getDocs, doc, setDoc, deleteDoc, getDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { collection, getDocs, doc, setDoc, deleteDoc, getDoc, onSnapshot } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
+import { db, auth } from "@/lib/firebase";
 import { usePrivacy } from "@/lib/privacyContext";
 import { formatCurrency, formatNumberBR } from "@/lib/formatters";
 import NumberInput from "@/components/NumberInput";
@@ -211,24 +212,36 @@ export default function LukeRotasPage() {
     }
   };
 
-  // Carrega lista dinâmica de vendedores ativos do Firestore
+  // Helper 100% ONLINE para consolidar vendedores garantindo que todos os cadastrados no Firestore apareçam
+  const updateVendorsFromDocs = (docs: any[]) => {
+    const vendorMap = new Map<string, { name: string; defaultColor: string }>();
+    // Inicializa com a base de segurança
+    DEFAULT_VENDORS.forEach((v) => vendorMap.set(v.name.trim().toLowerCase(), v));
+    // Sobrepõe e adiciona TODOS os vendedores/usuários ativos do Firestore em tempo real
+    docs.forEach((d) => {
+      const data = typeof d.data === "function" ? d.data() : d;
+      const rawName = data?.name;
+      if (rawName && typeof rawName === "string" && data.status !== "INACTIVE") {
+        const cleanName = rawName.trim();
+        if (cleanName) {
+          vendorMap.set(cleanName.toLowerCase(), {
+            name: cleanName,
+            defaultColor: data.color || getVendorColor(cleanName),
+          });
+        }
+      }
+    });
+    if (vendorMap.size > 0) {
+      setVendorsList(Array.from(vendorMap.values()));
+    }
+  };
+
+  // Carrega lista dinâmica de vendedores ativos do Firestore (100% ONLINE)
   const fetchVendors = async () => {
     try {
       const snapshot = await getDocs(collection(db, `tenants/${tenantId}/users`));
       if (!snapshot.empty) {
-        const loaded: { name: string; defaultColor: string }[] = [];
-        snapshot.forEach((d) => {
-          const data = d.data();
-          if (data.name && data.status !== "INACTIVE") {
-            loaded.push({
-              name: data.name,
-              defaultColor: data.color || getVendorColor(data.name),
-            });
-          }
-        });
-        if (loaded.length > 0) {
-          setVendorsList(loaded);
-        }
+        updateVendorsFromDocs(snapshot.docs);
       }
     } catch (err: any) {
       console.warn("Vendors fetch fallback:", err?.message);
@@ -239,6 +252,29 @@ export default function LukeRotasPage() {
     fetchSchedules();
     fetchRoutes();
     fetchVendors();
+
+    // 1. Escuta contínua e viva em tempo real do Firestore (100% ONLINE)
+    const unsubVendors = onSnapshot(
+      collection(db, `tenants/${tenantId}/users`),
+      (snapshot) => {
+        if (!snapshot.empty) {
+          updateVendorsFromDocs(snapshot.docs);
+        }
+      },
+      (err) => {
+        console.warn("Real-time vendors listener warn:", err?.message);
+      }
+    );
+
+    // 2. Revalidação instantânea assim que o login/token do usuário for restabelecido
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        fetchVendors();
+        fetchSchedules();
+        fetchRoutes();
+      }
+    });
+
     const loadCompany = async () => {
       try {
         const snap = await getDoc(doc(db, "tenants/tenant_luke_001/settings", "company"));
@@ -250,6 +286,11 @@ export default function LukeRotasPage() {
       }
     };
     loadCompany();
+
+    return () => {
+      unsubVendors();
+      unsubAuth();
+    };
   }, []);
 
   // Navegação de Datas
@@ -412,8 +453,9 @@ export default function LukeRotasPage() {
     };
   }, [scheduledEvents, currentYear, currentMonth]);
 
-  // Handlers de Abertura de Modal
+  // Handlers de Abertura de Modal (Consulta Imediata 100% Online)
   const handleOpenNewEventModal = (prefilledDate?: string) => {
+    fetchVendors();
     setEditingEvent(null);
     const targetDate = prefilledDate || selectedDate;
     const defaultVendor = vendorsList[0]?.name || "Alisson";
@@ -435,6 +477,7 @@ export default function LukeRotasPage() {
   };
 
   const handleEditEvent = (ev: ScheduledRouteEvent) => {
+    fetchVendors();
     setEditingEvent(ev);
     setFormData(ev);
     setIsEventModalOpen(true);
@@ -1572,7 +1615,7 @@ export default function LukeRotasPage() {
                 >
                   {vendorsList.map((v) => (
                     <option key={v.name} value={v.name}>
-                      {v.name} (Cor padrão do vendedor)
+                      {v.name}
                     </option>
                   ))}
                 </select>

@@ -4,6 +4,15 @@ Todas as melhorias, novidades e correções notáveis deste projeto serão docum
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-09-14
+### Added
+- **Ampliação da Logomarca na Barra Lateral (`/luke`)**:
+  - Expansão do container da logomarca oficial para até 80px de altura (`h-16 sm:h-20`) e 210px de largura com proporção preservada (`object-contain object-left`), tornando o logotipo e a assinatura "DISTRIBUIDORA" destacados e perfeitamente legíveis.
+- **Sincronização 100% Online em Tempo Real de Vendedores (`/luke/rotas` & `/luke/vendedores`)**:
+  - Implementação de listeners ativos `onSnapshot` conectados diretamente ao Google Cloud Firestore em ambas as telas, garantindo que qualquer vendedor cadastrado ou modificado reflita instantaneamente sem necessidade de recarregar a página.
+  - Revalidação instantânea no momento da autenticação (`onAuthStateChanged`) e reconsulta direta ao abrir o modal de agendamento de rotas.
+  - Validação amigável de campos no cadastro de vendedores com feedback via Toast informativo.
+
 ## [1.9.0] - 2026-09-14
 ### Added
 - **Carregamento Dinâmico de Vendedores na Gestão de Rotas (`/luke/rotas`)**:

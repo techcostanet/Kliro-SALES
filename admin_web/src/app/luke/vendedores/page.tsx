@@ -22,7 +22,7 @@ import {
   Calendar,
   Cloud,
 } from "lucide-react";
-import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch } from "firebase/firestore";
+import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { usePrivacy } from "@/lib/privacyContext";
 import { formatCurrency, formatPhoneBR, getWhatsAppLink, maskPhone } from "@/lib/formatters";
@@ -211,6 +211,37 @@ export default function LukeVendedoresPage() {
 
   useEffect(() => {
     fetchVendors();
+
+    const unsub = onSnapshot(
+      collection(db, `tenants/${tenantId}/users`),
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const loaded: VendorItem[] = [];
+          snapshot.forEach((docSnap) => {
+            const d = docSnap.data();
+            loaded.push({
+              id: docSnap.id,
+              name: d.name || "Vendedor",
+              email: d.email || "",
+              role: d.role || "VENDOR",
+              phone: d.phone || "",
+              color: d.color || getVendorColor(d.name),
+              vehicle: d.vehicle || "Veículo Comercial",
+              vehiclePlate: d.vehiclePlate || "---",
+              commissionRate: Number(d.commissionRate || 8),
+              assignedRoutes: Array.isArray(d.assignedRoutes) ? d.assignedRoutes : [d.assignedRoutes || "R"],
+              monthlyTarget: Number(d.monthlyTarget || 35000),
+              status: d.status || "ACTIVE",
+              notes: d.notes || "",
+            });
+          });
+          setVendors(loaded);
+        }
+      },
+      (err) => console.warn("Vendors realtime listener warn:", err?.message)
+    );
+
+    return () => unsub();
   }, []);
 
   // Filtragem
@@ -257,7 +288,14 @@ export default function LukeVendedoresPage() {
 
   const handleSaveVendor = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name?.trim() || !formData.email?.trim()) return;
+    if (!formData.name?.trim() || !formData.email?.trim()) {
+      setToast({
+        type: "cloud_error",
+        title: "Campos Obrigatórios",
+        message: "Por favor, preencha o Nome e o E-mail corporativo do vendedor para salvar.",
+      });
+      return;
+    }
 
     const payload: VendorItem = {
       id: formData.id || `usr-${Date.now()}`,

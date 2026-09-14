@@ -87,15 +87,15 @@ function LukeSidebarContent({ children }: { children: React.ReactNode }) {
       <aside className="w-full md:w-64 bg-brand-graphite border-r border-brand-blue/30 flex flex-col justify-between shrink-0 print:hidden">
         <div>
           {/* Header com Logomarca Dinâmica */}
-          <div className="p-5 border-b border-brand-blue/30 flex items-center justify-between">
-            <Link href="/luke" className="block group">
+          <div className="px-5 py-4 border-b border-brand-blue/30 flex items-center justify-start">
+            <Link href="/luke" className="block group w-full">
               {companyLogo ? (
-                <div className="flex items-center space-x-3">
-                  <div className="h-10 max-w-[170px] flex items-center justify-start overflow-hidden">
+                <div className="w-full flex items-center justify-start">
+                  <div className="h-16 sm:h-20 w-full max-w-[210px] flex items-center justify-start overflow-hidden">
                     <img
                       src={companyLogo}
                       alt={companyName}
-                      className="max-h-10 w-auto object-contain transition-transform group-hover:scale-105"
+                      className="max-h-16 sm:max-h-20 h-auto w-auto max-w-full object-contain object-left transition-transform group-hover:scale-105"
                       onError={() => setCompanyLogo(null)}
                     />
                   </div>
