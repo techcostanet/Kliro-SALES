@@ -4,6 +4,16 @@ Todas as melhorias, novidades e correções notáveis deste projeto serão docum
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-09-14
+### Changed
+- **Limpeza Operacional do Banco de Dados Firestore (`klirosales`)**:
+  - Exclusão em lote segura e atômica de todas as coleções de movimentação operacional: `clients` (561 clientes de teste), `routes` (36 rotas), `route_schedules`, `route_executions`, `transactions`, `payables`, `receivables`, `payment_terms` e `activity_logs`.
+  - **Preservação Integral do Cadastro de Produtos**: Todos os 46 produtos oficiais (`tenants/tenant_luke_001/products`) com fotos de alta qualidade, códigos de barras, preços de venda/custo e regras de estoque foram mantidos 100% intactos e funcionais.
+  - Preservação das credenciais de autenticação em `tenants/tenant_luke_001/users` e da infraestrutura de branding da empresa.
+- **Blindagem Contra Auto-Seeding Acidental de Dados (`/luke/clientes`, `/luke/rotas`, `/luke/configuracoes`)**:
+  - Remoção de gatilhos em segundo plano que re-semeavam coleções automaticamente quando vazias.
+  - Telas agora refletem estritamente o estado real do Firestore na nuvem, permitindo que a base permaneça limpa até novos cadastros operacionais.
+
 ## [1.9.1] - 2026-09-14
 ### Added
 - **Ampliação da Logomarca na Barra Lateral (`/luke`)**:

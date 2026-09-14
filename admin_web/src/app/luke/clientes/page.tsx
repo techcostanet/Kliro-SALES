@@ -101,7 +101,7 @@ export default function LukeClientesPage() {
     return CLIENT_COLUMNS.map((c) => c.key);
   });
 
-  const [clients, setClients] = useState<ClientItem[]>(() => mergeClientsWithCatalog([]));
+  const [clients, setClients] = useState<ClientItem[]>([]);
 
   const [loadingFirestore, setLoadingFirestore] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -226,14 +226,8 @@ export default function LukeClientesPage() {
             deleted: Boolean(d.deleted),
           });
         });
-      } else {
-        // Se a coleção ainda estiver vazia no Firestore, semeia em background silenciosamente
-        seedAllDefaultClients(tenantId, db).catch((err) =>
-          console.warn("Silent background initial seed clients error:", err)
-        );
       }
-      const merged = mergeClientsWithCatalog(loaded);
-      setClients(merged);
+      setClients(loaded);
     } catch (err: any) {
       console.warn("Firestore fetch offline/fallback:", err?.message);
     } finally {

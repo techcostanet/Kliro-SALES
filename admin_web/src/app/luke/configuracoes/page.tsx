@@ -244,11 +244,11 @@ export default function LukeConfiguracoesPage() {
         setPaymentTerms(loadedPt);
       }
 
-      // 3. Rotas: Garante auto-seeding do catálogo mestre e preservação total de rotas customizadas
-      const fullRoutes = await ensureRoutesSeeded(tenantId, db);
-      if (fullRoutes && fullRoutes.length > 0) {
-        setRoutes(fullRoutes);
-      }
+      // 3. Rotas: Carregamento do Firestore
+      const routesSnap = await getDocs(collection(db, `tenants/${tenantId}/routes`));
+      const loadedRoutes: RouteMaster[] = [];
+      routesSnap.forEach((d) => loadedRoutes.push({ id: d.id, ...d.data() } as RouteMaster));
+      setRoutes(loadedRoutes);
 
       // 4. Logs
       fetchLogs();

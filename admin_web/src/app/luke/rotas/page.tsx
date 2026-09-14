@@ -202,10 +202,9 @@ export default function LukeRotasPage() {
       if (!routesSnap.empty) {
         const loaded: RouteMaster[] = [];
         routesSnap.forEach((d) => loaded.push({ id: d.id, ...d.data() } as RouteMaster));
-        setAvailableRoutes(mergeRoutesWithCatalog(loaded));
+        setAvailableRoutes(loaded);
       } else {
-        const seeded = await ensureRoutesSeeded(tenantId, db);
-        setAvailableRoutes(seeded);
+        setAvailableRoutes([]);
       }
     } catch (err: any) {
       console.warn("Rotas catalog fallback:", err?.message);
