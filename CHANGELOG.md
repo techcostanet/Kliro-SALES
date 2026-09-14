@@ -4,6 +4,17 @@ Todas as melhorias, novidades e correções notáveis deste projeto serão docum
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-09-14
+### Changed
+- **Ambiente Exclusivo do Cadastro de Produtos (Interface Limpa Total)**:
+  - Barra lateral reformulada para exibir **exclusivamente o menu "Produtos"**, removendo todos os outros módulos (Visão, Clientes, Rotas, Cargas, Financeiro, Transações, Vendedores, Empresa, Configurações, Logs e Rua).
+  - Redirecionamento automático e instantâneo no login e na rota `/luke` diretamente para `/luke/produtos`.
+  - Logotipo na barra lateral agora navega diretamente para o Cadastro de Produtos.
+  - Substituição da página de visão antiga com métricas de demonstração por redirecionamento limpo para Produtos.
+- **Configuração de Cache no Firebase Hosting (`firebase.json`)**:
+  - Inclusão de cabeçalhos HTTP `Cache-Control: no-cache, no-store, must-revalidate` para rotas de aplicação, garantindo que o navegador nunca sirva versões antigas de código ou dados em cache.
+  - Tag visual da versão final 11 estampada no rodapé de login (`v1.11.0`).
+
 ## [1.10.0] - 2026-09-14
 ### Changed
 - **Limpeza Operacional do Banco de Dados Firestore (`klirosales`)**:
