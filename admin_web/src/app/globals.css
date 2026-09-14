@@ -23,6 +23,17 @@ body {
   @apply antialiased;
 }
 
+/* Ocultar setas para cima e para baixo de campos numéricos (Chrome, Safari, Edge, Opera e Firefox) */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 @media print {
   @page {
     size: A4 portrait;

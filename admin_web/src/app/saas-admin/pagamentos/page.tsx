@@ -16,6 +16,7 @@ import {
   Zap,
   Info,
 } from "lucide-react";
+import NumberInput from "@/components/NumberInput";
 
 export default function SaasAdminPagamentosPage() {
   // Configuração Pix
@@ -253,12 +254,12 @@ export default function SaasAdminPagamentosPage() {
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
                     Dias p/ Vencimento
                   </label>
-                  <input
-                    type="number"
-                    min="1"
+                  <NumberInput
+                    min={1}
                     value={boletoDaysToDue}
-                    onChange={(e) => setBoletoDaysToDue(Number(e.target.value))}
+                    onChange={(val) => setBoletoDaysToDue(val)}
                     className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="3"
                   />
                 </div>
 
@@ -266,12 +267,12 @@ export default function SaasAdminPagamentosPage() {
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
                     Multa por Atraso (%)
                   </label>
-                  <input
-                    type="number"
-                    step="0.5"
+                  <NumberInput
+                    allowDecimals
                     value={boletoFinePercent}
-                    onChange={(e) => setBoletoFinePercent(Number(e.target.value))}
+                    onChange={(val) => setBoletoFinePercent(val)}
                     className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="2.0"
                   />
                 </div>
               </div>
@@ -280,12 +281,12 @@ export default function SaasAdminPagamentosPage() {
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
                   Juros Mensais (%)
                 </label>
-                <input
-                  type="number"
-                  step="0.1"
+                <NumberInput
+                  allowDecimals
                   value={boletoInterestPercent}
-                  onChange={(e) => setBoletoInterestPercent(Number(e.target.value))}
+                  onChange={(val) => setBoletoInterestPercent(val)}
                   className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="1.0"
                 />
               </div>
 

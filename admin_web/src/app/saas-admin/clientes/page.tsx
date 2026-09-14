@@ -19,6 +19,8 @@ import {
   Mail,
   FileText,
 } from "lucide-react";
+import CurrencyInput from "@/components/CurrencyInput";
+import NumberInput from "@/components/NumberInput";
 
 interface Tenant {
   id: string;
@@ -439,12 +441,12 @@ export default function SaasAdminClientesPage() {
                     <label className="block text-[11px] font-bold text-slate-600 mb-1">
                       Nº Vendedores
                     </label>
-                    <input
-                      type="number"
-                      min="1"
+                    <NumberInput
+                      min={1}
                       value={formSeats}
-                      onChange={(e) => setFormSeats(Number(e.target.value))}
+                      onChange={(val) => setFormSeats(val)}
                       className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="1"
                     />
                   </div>
 
@@ -452,13 +454,11 @@ export default function SaasAdminClientesPage() {
                     <label className="block text-[11px] font-bold text-slate-600 mb-1">
                       Preço / Vendedor (R$)
                     </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="5"
+                    <CurrencyInput
                       value={formPricePerSeat}
-                      onChange={(e) => setFormPricePerSeat(Number(e.target.value))}
+                      onChange={(val) => setFormPricePerSeat(val)}
                       className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="R$ 0,00"
                     />
                   </div>
 
@@ -466,12 +466,11 @@ export default function SaasAdminClientesPage() {
                     <label className="block text-[11px] font-bold text-slate-600 mb-1">
                       Desconto Aplicado (R$)
                     </label>
-                    <input
-                      type="number"
-                      min="0"
+                    <CurrencyInput
                       value={formDiscount}
-                      onChange={(e) => setFormDiscount(Number(e.target.value))}
+                      onChange={(val) => setFormDiscount(val)}
                       className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-bold text-emerald-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="R$ 0,00"
                     />
                   </div>
                 </div>
@@ -604,12 +603,12 @@ export default function SaasAdminClientesPage() {
                     <label className="block text-[11px] font-bold text-slate-600 mb-1">
                       Nº Vendedores
                     </label>
-                    <input
-                      type="number"
-                      min="1"
+                    <NumberInput
+                      min={1}
                       value={formSeats}
-                      onChange={(e) => setFormSeats(Number(e.target.value))}
+                      onChange={(val) => setFormSeats(val)}
                       className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="1"
                     />
                   </div>
 
@@ -617,13 +616,11 @@ export default function SaasAdminClientesPage() {
                     <label className="block text-[11px] font-bold text-slate-600 mb-1">
                       Preço / Vendedor (R$)
                     </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="5"
+                    <CurrencyInput
                       value={formPricePerSeat}
-                      onChange={(e) => setFormPricePerSeat(Number(e.target.value))}
+                      onChange={(val) => setFormPricePerSeat(val)}
                       className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="R$ 0,00"
                     />
                   </div>
 
@@ -631,12 +628,11 @@ export default function SaasAdminClientesPage() {
                     <label className="block text-[11px] font-bold text-slate-600 mb-1">
                       Desconto (R$)
                     </label>
-                    <input
-                      type="number"
-                      min="0"
+                    <CurrencyInput
                       value={formDiscount}
-                      onChange={(e) => setFormDiscount(Number(e.target.value))}
+                      onChange={(val) => setFormDiscount(val)}
                       className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-bold text-emerald-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="R$ 0,00"
                     />
                   </div>
                 </div>

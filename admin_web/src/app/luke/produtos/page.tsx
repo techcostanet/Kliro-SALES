@@ -28,6 +28,8 @@ import { db } from "@/lib/firebase";
 import initialProducts from "@/lib/products_catalog.json";
 import { usePrivacy } from "@/lib/privacyContext";
 import ToastFeedback, { ToastMessage } from "@/components/ToastFeedback";
+import CurrencyInput from "@/components/CurrencyInput";
+import NumberInput from "@/components/NumberInput";
 import { logActivity } from "@/lib/activityLogger";
 
 export interface ProductItem {
@@ -79,7 +81,6 @@ export default function LukeProdutosPage() {
   const { hideValues, togglePrivacy, formatValue } = usePrivacy();
   const [products, setProducts] = useState<ProductItem[]>(initialProducts as ProductItem[]);
   const [loadingFirestore, setLoadingFirestore] = useState(false);
-  const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Todas");
   const [selectedBrand, setSelectedBrand] = useState("Todas as Marcas");
@@ -143,6 +144,18 @@ export default function LukeProdutosPage() {
         });
         loaded.sort((a, b) => (a.order || 0) - (b.order || 0));
         setProducts(loaded);
+      } else {
+        // Carga inicial em segundo plano se o banco estiver vazio
+        try {
+          const batch = writeBatch(db);
+          for (const prod of (initialProducts as ProductItem[])) {
+            const prodRef = doc(db, `tenants/${tenantId}/products`, prod.id);
+            batch.set(prodRef, { ...prod, updatedAt: new Date() }, { merge: true });
+          }
+          await batch.commit();
+        } catch (seedErr) {
+          console.warn("Silent initial seed products:", seedErr);
+        }
       }
     } catch (err: any) {
       console.warn("Firestore fetch offline/fallback:", err?.message);
@@ -154,26 +167,6 @@ export default function LukeProdutosPage() {
   useEffect(() => {
     fetchProductsFromFirestore();
   }, []);
-
-  // Sincronizar catálogo inicial completo para Firestore
-  const handleSyncFirestore = async () => {
-    setLoadingFirestore(true);
-    setSyncMessage(null);
-    try {
-      const batch = writeBatch(db);
-      for (const prod of products) {
-        const prodRef = doc(db, `tenants/${tenantId}/products`, prod.id);
-        batch.set(prodRef, { ...prod, updatedAt: new Date() }, { merge: true });
-      }
-      await batch.commit();
-      setSyncMessage("✅ Catálogo multi-marcas sincronizado com o Firestore com sucesso!");
-      setTimeout(() => setSyncMessage(null), 4000);
-    } catch (err: any) {
-      setSyncMessage(`❌ Erro ao sincronizar: ${err?.message}`);
-    } finally {
-      setLoadingFirestore(false);
-    }
-  };
 
   // Filtragem
   const filtered = useMemo(() => {
@@ -404,16 +397,6 @@ export default function LukeProdutosPage() {
           </button>
 
           <button
-            onClick={handleSyncFirestore}
-            disabled={loadingFirestore}
-            className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-brand-blue/40 border border-brand-gold/40 text-brand-offwhite hover:bg-brand-blue/60 px-3.5 py-2.5 rounded-xl font-semibold transition text-xs shadow-md"
-            title="Sincronizar produtos com Firestore"
-          >
-            <RefreshCw size={14} className={loadingFirestore ? "animate-spin text-brand-gold" : "text-brand-gold"} />
-            <span>Sincronizar</span>
-          </button>
-
-          <button
             onClick={() => handleOpenModal()}
             className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-brand-gold text-brand-black px-4 py-2.5 rounded-xl font-extrabold hover:bg-yellow-500 transition shadow-lg text-xs shrink-0"
           >
@@ -422,14 +405,6 @@ export default function LukeProdutosPage() {
           </button>
         </div>
       </div>
-
-      {/* Sync Alert */}
-      {syncMessage && (
-        <div className="p-4 rounded-xl bg-brand-graphite border border-brand-gold/50 text-sm text-brand-offwhite flex items-center space-x-3 shadow-lg">
-          <CheckCircle2 className="text-brand-gold shrink-0" size={20} />
-          <span>{syncMessage}</span>
-        </div>
-      )}
 
       {/* Cards de Métricas */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -809,13 +784,12 @@ export default function LukeProdutosPage() {
                   <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
                     Preço (R$)
                   </label>
-                  <input
-                    type="number"
-                    step="0.01"
+                  <CurrencyInput
                     required
-                    value={formData.price || ""}
-                    onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
+                    value={formData.price ?? ""}
+                    onChange={(val) => setFormData({ ...formData, price: val })}
                     className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-gold font-bold focus:outline-none focus:border-brand-gold"
+                    placeholder="R$ 0,00"
                   />
                 </div>
 
@@ -823,12 +797,11 @@ export default function LukeProdutosPage() {
                   <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
                     Custo (R$)
                   </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.costPrice || ""}
-                    onChange={(e) => setFormData({ ...formData, costPrice: Number(e.target.value) })}
+                  <CurrencyInput
+                    value={formData.costPrice ?? ""}
+                    onChange={(val) => setFormData({ ...formData, costPrice: val })}
                     className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold"
+                    placeholder="R$ 0,00"
                   />
                 </div>
 
@@ -852,11 +825,11 @@ export default function LukeProdutosPage() {
                   <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
                     Estoque Físico
                   </label>
-                  <input
-                    type="number"
-                    value={formData.physicalStock || 0}
-                    onChange={(e) => setFormData({ ...formData, physicalStock: Number(e.target.value) })}
+                  <NumberInput
+                    value={formData.physicalStock ?? 0}
+                    onChange={(val) => setFormData({ ...formData, physicalStock: val })}
                     className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold"
+                    placeholder="0"
                   />
                 </div>
 
@@ -864,11 +837,11 @@ export default function LukeProdutosPage() {
                   <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
                     Estoque Mínimo
                   </label>
-                  <input
-                    type="number"
-                    value={formData.minStock || 20}
-                    onChange={(e) => setFormData({ ...formData, minStock: Number(e.target.value) })}
+                  <NumberInput
+                    value={formData.minStock ?? 20}
+                    onChange={(val) => setFormData({ ...formData, minStock: val })}
                     className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold"
+                    placeholder="20"
                   />
                 </div>
 

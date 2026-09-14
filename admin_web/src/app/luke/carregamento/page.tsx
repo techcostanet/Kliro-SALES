@@ -22,6 +22,7 @@ import initialProducts from "@/lib/products_catalog.json";
 import { usePrivacy } from "@/lib/privacyContext";
 import { getVendorColor } from "@/lib/vendorColors";
 import VendorBadge from "@/components/VendorBadge";
+import NumberInput from "@/components/NumberInput";
 
 interface LoadingItem {
   productId: string;
@@ -487,17 +488,16 @@ export default function CarregamentoPage() {
                       </td>
 
                       <td className="p-3.5 text-center">
-                        <input
-                          type="number"
-                          min="0"
+                        <NumberInput
+                          min={0}
                           value={item.requested || ""}
                           placeholder="0"
-                          onChange={(e) =>
+                          onChange={(val) =>
                             handleQtyChange(
                               Number(selectedTab),
                               p.id,
                               "requested",
-                              parseInt(e.target.value, 10)
+                              val
                             )
                           }
                           className="w-20 text-center bg-brand-black border border-brand-blue/40 rounded-lg py-1 text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold font-semibold"
@@ -505,17 +505,16 @@ export default function CarregamentoPage() {
                       </td>
 
                       <td className="p-3.5 text-center">
-                        <input
-                          type="number"
-                          min="0"
+                        <NumberInput
+                          min={0}
                           value={item.loaded || ""}
                           placeholder="0"
-                          onChange={(e) =>
+                          onChange={(val) =>
                             handleQtyChange(
                               Number(selectedTab),
                               p.id,
                               "loaded",
-                              parseInt(e.target.value, 10)
+                              val
                             )
                           }
                           className="w-20 text-center bg-brand-black border border-brand-blue/40 rounded-lg py-1 text-sm text-blue-400 focus:outline-none focus:border-blue-400 font-bold"
@@ -523,17 +522,16 @@ export default function CarregamentoPage() {
                       </td>
 
                       <td className="p-3.5 text-center">
-                        <input
-                          type="number"
-                          min="0"
+                        <NumberInput
+                          min={0}
                           value={item.returned || ""}
                           placeholder="0"
-                          onChange={(e) =>
+                          onChange={(val) =>
                             handleQtyChange(
                               Number(selectedTab),
                               p.id,
                               "returned",
-                              parseInt(e.target.value, 10)
+                              val
                             )
                           }
                           className="w-20 text-center bg-brand-black border border-brand-blue/40 rounded-lg py-1 text-sm text-amber-400 focus:outline-none focus:border-amber-400 font-semibold"

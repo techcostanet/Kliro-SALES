@@ -22,12 +22,14 @@ import {
   Calendar,
   Cloud,
 } from "lucide-react";
-import { collection, getDocs, doc, setDoc, deleteDoc } from "firebase/firestore";
+import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { usePrivacy } from "@/lib/privacyContext";
 import { formatCurrency, formatPhoneBR, getWhatsAppLink, maskPhone } from "@/lib/formatters";
 import { VENDOR_COLOR_PALETTE, getVendorColor } from "@/lib/vendorColors";
 import VendorBadge from "@/components/VendorBadge";
+import CurrencyInput from "@/components/CurrencyInput";
+import NumberInput from "@/components/NumberInput";
 import ColumnOrganizer, { ColumnDefinition } from "@/components/ColumnOrganizer";
 import ToastFeedback, { ToastMessage } from "@/components/ToastFeedback";
 import { logActivity } from "@/lib/activityLogger";
@@ -127,7 +129,6 @@ export default function LukeVendedoresPage() {
   const { hideValues, togglePrivacy, formatValue } = usePrivacy();
   const [vendors, setVendors] = useState<VendorItem[]>(INITIAL_VENDORS);
   const [loadingFirestore, setLoadingFirestore] = useState(false);
-  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRoleFilter, setSelectedRoleFilter] = useState("ALL");
@@ -191,6 +192,15 @@ export default function LukeVendedoresPage() {
           });
         });
         setVendors(loaded);
+      } else {
+        // Se ainda não existirem vendedores no Firestore, popula em background silencioso com os dados iniciais
+        setVendors(INITIAL_VENDORS);
+        const batch = writeBatch(db);
+        INITIAL_VENDORS.forEach((v) => {
+          const ref = doc(db, `tenants/${tenantId}/users`, v.id);
+          batch.set(ref, { ...v, createdAt: new Date() }, { merge: true });
+        });
+        batch.commit().catch((err) => console.warn("Silent background initial seed vendors error:", err));
       }
     } catch (err: any) {
       console.warn("Firestore fetch offline/fallback:", err?.message);
@@ -202,27 +212,6 @@ export default function LukeVendedoresPage() {
   useEffect(() => {
     fetchVendors();
   }, []);
-
-  // Sincronizar Firestore
-  const handleSyncFirestore = async () => {
-    setLoadingFirestore(true);
-    setSyncMessage(null);
-    try {
-      for (const v of vendors) {
-        await setDoc(
-          doc(db, `tenants/${tenantId}/users`, v.id),
-          { ...v, updatedAt: new Date() },
-          { merge: true }
-        );
-      }
-      setSyncMessage("✅ Equipe e cores sincronizadas com o Firestore com sucesso!");
-      setTimeout(() => setSyncMessage(null), 4000);
-    } catch (err: any) {
-      setSyncMessage(`❌ Erro ao sincronizar: ${err?.message}`);
-    } finally {
-      setLoadingFirestore(false);
-    }
-  };
 
   // Filtragem
   const filtered = useMemo(() => {
@@ -456,16 +445,6 @@ export default function LukeVendedoresPage() {
           </button>
 
           <button
-            onClick={handleSyncFirestore}
-            disabled={loadingFirestore}
-            className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-brand-blue/40 border border-brand-gold/40 text-brand-offwhite hover:bg-brand-blue/60 px-3.5 py-2.5 rounded-xl font-semibold transition text-xs shadow-md"
-            title="Sincronizar equipe com o Firestore"
-          >
-            <RefreshCw size={14} className={loadingFirestore ? "animate-spin text-brand-gold" : "text-brand-gold"} />
-            <span>Sincronizar</span>
-          </button>
-
-          <button
             onClick={() => handleOpenModal()}
             className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-brand-gold text-brand-black px-4 py-2.5 rounded-xl font-extrabold hover:bg-yellow-500 transition shadow-lg text-xs shrink-0"
           >
@@ -474,14 +453,6 @@ export default function LukeVendedoresPage() {
           </button>
         </div>
       </div>
-
-      {/* Sync Message */}
-      {syncMessage && (
-        <div className="p-4 rounded-xl bg-brand-graphite border border-brand-gold/50 text-sm text-brand-offwhite flex items-center space-x-3 shadow-lg">
-          <CheckCircle2 className="text-brand-gold shrink-0" size={20} />
-          <span>{syncMessage}</span>
-        </div>
-      )}
 
       {/* Cards de Métricas */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -904,12 +875,12 @@ export default function LukeVendedoresPage() {
                   <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
                     Comissão (%)
                   </label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    value={formData.commissionRate || 8}
-                    onChange={(e) => setFormData({ ...formData, commissionRate: Number(e.target.value) })}
+                  <NumberInput
+                    value={formData.commissionRate ?? 8}
+                    onChange={(val) => setFormData({ ...formData, commissionRate: val })}
+                    allowDecimals
                     className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-emerald-400 font-bold focus:outline-none focus:border-brand-gold"
+                    placeholder="8"
                   />
                 </div>
 
@@ -917,11 +888,11 @@ export default function LukeVendedoresPage() {
                   <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
                     Meta Mensal (R$)
                   </label>
-                  <input
-                    type="number"
-                    value={formData.monthlyTarget || 40000}
-                    onChange={(e) => setFormData({ ...formData, monthlyTarget: Number(e.target.value) })}
+                  <CurrencyInput
+                    value={formData.monthlyTarget ?? 40000}
+                    onChange={(val) => setFormData({ ...formData, monthlyTarget: val })}
                     className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-gold font-bold focus:outline-none focus:border-brand-gold"
+                    placeholder="R$ 40.000,00"
                   />
                 </div>
               </div>

@@ -24,7 +24,6 @@ import {
   Sparkles,
   RefreshCw,
   Cloud,
-  CloudUpload,
 } from "lucide-react";
 import { collection, getDocs, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -46,6 +45,7 @@ import {
 } from "@/lib/formatters";
 import ToastFeedback, { ToastMessage } from "@/components/ToastFeedback";
 import ColumnOrganizer, { ColumnDefinition } from "@/components/ColumnOrganizer";
+import NumberInput from "@/components/NumberInput";
 import { logActivity } from "@/lib/activityLogger";
 
 export type { ClientItem, BuyerContact };
@@ -102,8 +102,6 @@ export default function LukeClientesPage() {
   });
 
   const [clients, setClients] = useState<ClientItem[]>(() => mergeClientsWithCatalog([]));
-  const [isSyncingAll, setIsSyncingAll] = useState(false);
-  const [syncProgress, setSyncProgress] = useState(0);
 
   const [loadingFirestore, setLoadingFirestore] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -228,6 +226,11 @@ export default function LukeClientesPage() {
             deleted: Boolean(d.deleted),
           });
         });
+      } else {
+        // Se a coleção ainda estiver vazia no Firestore, semeia em background silenciosamente
+        seedAllDefaultClients(tenantId, db).catch((err) =>
+          console.warn("Silent background initial seed clients error:", err)
+        );
       }
       const merged = mergeClientsWithCatalog(loaded);
       setClients(merged);
@@ -241,39 +244,6 @@ export default function LukeClientesPage() {
   useEffect(() => {
     fetchClientsFromFirestore();
   }, []);
-
-  // Sincronização em Massa de todos os 561 clientes para o Firestore
-  const handleSyncAllClientsToCloud = async () => {
-    if (isSyncingAll) return;
-    setIsSyncingAll(true);
-    setSyncProgress(0);
-
-    try {
-      await seedAllDefaultClients(tenantId, db, (processed, total) => {
-        const pct = Math.round((processed / total) * 100);
-        setSyncProgress(pct);
-      });
-
-      await fetchClientsFromFirestore();
-
-      setToast({
-        type: "cloud_success",
-        title: "Catálogo Completo Sincronizado!",
-        message: "Todos os 561 clientes foram gravados e validados no banco de dados Firestore da nuvem.",
-        isCloud: true,
-      });
-    } catch (err: any) {
-      console.error("Erro na sincronização de clientes:", err);
-      setToast({
-        type: "cloud_error",
-        title: "Falha na Sincronização em Massa",
-        message: err?.message || "Não foi possível sincronizar todos os clientes na nuvem.",
-        isCloud: true,
-      });
-    } finally {
-      setIsSyncingAll(false);
-    }
-  };
 
   // Filtragem
   const filtered = useMemo(() => {
@@ -640,17 +610,6 @@ export default function LukeClientesPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          {/* Botão Sincronizar Catálogo Completo na Nuvem */}
-          <button
-            onClick={handleSyncAllClientsToCloud}
-            disabled={isSyncingAll}
-            className="flex items-center space-x-1.5 bg-brand-blue/30 text-brand-gold border border-brand-gold/30 hover:bg-brand-blue/50 px-3.5 py-2.5 rounded-xl font-bold transition shadow text-xs shrink-0 disabled:opacity-50"
-            title="Garantir que todos os 561 clientes estejam gravados na nuvem Firestore"
-          >
-            <CloudUpload size={16} className={isSyncingAll ? "animate-bounce" : ""} />
-            <span>{isSyncingAll ? `Sincronizando (${syncProgress}%)...` : "Sincronizar Catálogo na Nuvem"}</span>
-          </button>
-
           {/* Toggle Modo Privacidade */}
           <button
             onClick={togglePrivacy}
@@ -1041,12 +1000,12 @@ export default function LukeClientesPage() {
                     <label className="block text-[11px] text-brand-offwhite/70 mb-1">
                       Ordem de Atendimento / Visita
                     </label>
-                    <input
-                      type="number"
+                    <NumberInput
                       min={1}
-                      value={formData.order || 1}
-                      onChange={(e) => handleOrderChange(Number(e.target.value))}
+                      value={formData.order ?? 1}
+                      onChange={(val) => handleOrderChange(val)}
                       className="w-full px-3 py-2 bg-brand-graphite border border-brand-blue/40 rounded-lg text-xs text-brand-offwhite font-mono font-bold focus:outline-none focus:border-brand-gold"
+                      placeholder="1"
                     />
                   </div>
 

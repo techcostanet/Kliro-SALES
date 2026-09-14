@@ -39,6 +39,7 @@ import {
   formatDateTimeBR,
   formatNumberBR,
 } from "@/lib/formatters";
+import CurrencyInput from "@/components/CurrencyInput";
 
 export interface PayableItem {
   id: string;
@@ -1678,14 +1679,12 @@ export default function LukeFinanceiroPage() {
                   <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
                     Valor (R$)
                   </label>
-                  <input
-                    type="number"
-                    step="0.01"
+                  <CurrencyInput
                     required
-                    value={payableForm.amount || ""}
-                    onChange={(e) => setPayableForm({ ...payableForm, amount: Number(e.target.value) })}
+                    value={payableForm.amount ?? ""}
+                    onChange={(val) => setPayableForm({ ...payableForm, amount: val })}
                     className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-amber-400 font-bold focus:outline-none focus:border-brand-gold"
-                    placeholder="0,00"
+                    placeholder="R$ 0,00"
                   />
                 </div>
 

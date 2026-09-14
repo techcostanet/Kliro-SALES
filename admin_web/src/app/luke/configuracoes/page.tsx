@@ -40,6 +40,7 @@ import {
   limit,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import NumberInput from "@/components/NumberInput";
 import {
   ALL_MENU_KEYS,
   ROLE_PRESETS,
@@ -1589,11 +1590,11 @@ export default function LukeConfiguracoesPage() {
                   <label className="block text-xs font-bold text-brand-offwhite mb-1">
                     Meta de Clientes
                   </label>
-                  <input
-                    type="number"
-                    value={routeFormData.targetClientsCount || 20}
-                    onChange={(e) => setRouteFormData({ ...routeFormData, targetClientsCount: Number(e.target.value) })}
+                  <NumberInput
+                    value={routeFormData.targetClientsCount ?? 20}
+                    onChange={(val) => setRouteFormData({ ...routeFormData, targetClientsCount: val })}
                     className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-xs text-brand-offwhite font-mono focus:outline-none focus:border-brand-gold"
+                    placeholder="20"
                   />
                 </div>
 

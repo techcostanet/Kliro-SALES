@@ -137,7 +137,12 @@ export function formatCurrencyInput(value: string | number | null | undefined): 
   if (value === null || value === undefined || value === "") {
     return { raw: 0, formatted: "R$ 0,00" };
   }
-  const cleanDigits = String(value).replace(/\D/g, "");
+  let cleanDigits = "";
+  if (typeof value === "number") {
+    cleanDigits = Math.round(value * 100).toString();
+  } else {
+    cleanDigits = String(value).replace(/\D/g, "");
+  }
   const num = parseInt(cleanDigits || "0", 10) / 100;
   return {
     raw: num,

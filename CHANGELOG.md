@@ -4,6 +4,23 @@ Todas as melhorias, novidades e correções notáveis deste projeto serão docum
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-09-14
+### Added
+- **Carregamento Dinâmico de Vendedores na Gestão de Rotas (`/luke/rotas`)**:
+  - Consulta em tempo real à coleção Firestore `tenants/${tenantId}/users`, garantindo que novos vendedores cadastrados apareçam instantaneamente no seletor do modal "Nova Rota" e nos filtros do calendário, com suas cores corporativas personalizadas.
+- **Componentes de Entrada de Dados Sem Setas Verticais (`CurrencyInput` & `NumberInput`)**:
+  - `CurrencyInput`: Máscara financeira em tempo real (`R$ 0,00`) com digitação fluida e conversão numérica transparente.
+  - `NumberInput`: Entrada numérica simples com remoção global de setas verticais nativas (*spinbuttons*) para Chrome, Edge, Safari e Firefox via `globals.css`.
+  - Aplicados em 10 telas críticas do sistema (Clientes, Vendedores, Produtos, Carregamento, Financeiro, Configurações e SaaS Admin).
+- **Diretrizes e Regras do Projeto (`.agents/rules/project-rules.md` e `AGENTS.md`)**:
+  - Padronização do protocolo de conclusão: validação de build, versionamento tríplice, commit/push para o GitHub e deploy contínuo para o Firebase Hosting.
+  - Regra de busca ativa por melhorias nos planos de implementação (incluídas no final dos planos sob destaque) com visão de produto SaaS 100% online e UX de excelência.
+
+### Removed
+- **Eliminação de Botões Manuais de Sincronização (`/luke/produtos`, `/luke/vendedores`, `/luke/clientes`)**:
+  - Removidos todos os botões visuais manuais de "Sincronizar" e barras de alerta redundantes.
+  - Carga e validação inicial ocorrem de forma 100% silenciosa e em segundo plano caso as coleções estejam vazias no Firestore, mantendo a persistência atômica individual por ação com feedback visual imediato via Toast.
+
 ## [1.8.0] - 2026-09-12
 ### Added
 - **Feedback Visual de Gravação na Nuvem em Tempo Real (Todo o Sistema)**:

@@ -12,6 +12,7 @@ import {
   Save,
   CheckCircle2,
 } from "lucide-react";
+import CurrencyInput from "@/components/CurrencyInput";
 
 interface Plan {
   id: string;
@@ -282,14 +283,12 @@ export default function SaasAdminPlanosPage() {
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
                     Preço / Vendedor (R$)
                   </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="5"
+                  <CurrencyInput
                     required
                     value={formPricePerSeat}
-                    onChange={(e) => setFormPricePerSeat(Number(e.target.value))}
+                    onChange={(val) => setFormPricePerSeat(val)}
                     className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="R$ 0,00"
                   />
                 </div>
               </div>

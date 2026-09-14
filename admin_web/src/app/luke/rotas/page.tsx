@@ -37,6 +37,7 @@ import { collection, getDocs, doc, setDoc, deleteDoc, getDoc } from "firebase/fi
 import { db } from "@/lib/firebase";
 import { usePrivacy } from "@/lib/privacyContext";
 import { formatCurrency, formatNumberBR } from "@/lib/formatters";
+import NumberInput from "@/components/NumberInput";
 import { VENDOR_COLOR_PALETTE, getVendorColor, getVendorSolidBadgeStyles } from "@/lib/vendorColors";
 import {
   MASTER_ROUTES_CATALOG,
@@ -102,7 +103,7 @@ const SPECIAL_EVENTS: Record<string, { label: string; color: string }> = {
   "2026-09-05": { label: "Aniversário", color: "#f87171" },
 };
 
-const VENDORS_LIST = [
+const DEFAULT_VENDORS = [
   { name: "Alisson", defaultColor: "#10b981" },
   { name: "Alexandre", defaultColor: "#0ea5e9" },
   { name: "Lucas", defaultColor: "#8b5cf6" },
@@ -122,12 +123,12 @@ export default function LukeRotasPage() {
   // Estados principais
   const [scheduledEvents, setScheduledEvents] = useState<ScheduledRouteEvent[]>(INITIAL_SCHEDULED_EVENTS);
   const [availableRoutes, setAvailableRoutes] = useState<RouteMaster[]>(MASTER_ROUTES_CATALOG);
+  const [vendorsList, setVendorsList] = useState<{ name: string; defaultColor: string }[]>(DEFAULT_VENDORS);
   const [viewMode, setViewMode] = useState<"MONTH" | "WEEK" | "DAY" | "LIST">("MONTH");
   const [currentYear, setCurrentYear] = useState<number>(2026);
   const [currentMonth, setCurrentMonth] = useState<number>(7); // 0-indexed (7 = Agosto)
   const [selectedDate, setSelectedDate] = useState<string>("2026-08-27"); // Data foco
   const [loadingFirestore, setLoadingFirestore] = useState(false);
-  const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -210,9 +211,34 @@ export default function LukeRotasPage() {
     }
   };
 
+  // Carrega lista dinâmica de vendedores ativos do Firestore
+  const fetchVendors = async () => {
+    try {
+      const snapshot = await getDocs(collection(db, `tenants/${tenantId}/users`));
+      if (!snapshot.empty) {
+        const loaded: { name: string; defaultColor: string }[] = [];
+        snapshot.forEach((d) => {
+          const data = d.data();
+          if (data.name && data.status !== "INACTIVE") {
+            loaded.push({
+              name: data.name,
+              defaultColor: data.color || getVendorColor(data.name),
+            });
+          }
+        });
+        if (loaded.length > 0) {
+          setVendorsList(loaded);
+        }
+      }
+    } catch (err: any) {
+      console.warn("Vendors fetch fallback:", err?.message);
+    }
+  };
+
   useEffect(() => {
     fetchSchedules();
     fetchRoutes();
+    fetchVendors();
     const loadCompany = async () => {
       try {
         const snap = await getDoc(doc(db, "tenants/tenant_luke_001/settings", "company"));
@@ -225,27 +251,6 @@ export default function LukeRotasPage() {
     };
     loadCompany();
   }, []);
-
-  // Sincronizar com o Firestore
-  const handleSyncFirestore = async () => {
-    setLoadingFirestore(true);
-    setSyncMessage(null);
-    try {
-      for (const ev of scheduledEvents) {
-        await setDoc(
-          doc(db, `tenants/${tenantId}/route_schedules`, ev.id),
-          { ...ev, updatedAt: new Date() },
-          { merge: true }
-        );
-      }
-      setSyncMessage("✅ Cronograma de rotas sincronizado com o Firestore!");
-      setTimeout(() => setSyncMessage(null), 4000);
-    } catch (err: any) {
-      setSyncMessage(`❌ Erro ao sincronizar: ${err?.message}`);
-    } finally {
-      setLoadingFirestore(false);
-    }
-  };
 
   // Navegação de Datas
   const handlePrev = () => {
@@ -411,13 +416,15 @@ export default function LukeRotasPage() {
   const handleOpenNewEventModal = (prefilledDate?: string) => {
     setEditingEvent(null);
     const targetDate = prefilledDate || selectedDate;
+    const defaultVendor = vendorsList[0]?.name || "Alisson";
+    const defaultColor = vendorsList[0]?.defaultColor || getVendorColor(defaultVendor);
     setFormData({
       id: `ev-${Date.now()}`,
       date: targetDate,
       routeCode: "R1",
       routeName: "Rota R1 - Centro & Região",
-      vendorName: "Alisson",
-      vendorColor: getVendorColor("Alisson"),
+      vendorName: defaultVendor,
+      vendorColor: defaultColor,
       status: "SCHEDULED",
       totalClients: 24,
       completedVisits: 0,
@@ -703,8 +710,11 @@ export default function LukeRotasPage() {
       return [...prev, ...onlyNew];
     });
 
-    setSyncMessage(`✨ Cronograma gerado com sucesso para ${MONTH_NAMES[currentMonth]} de ${currentYear}!`);
-    setTimeout(() => setSyncMessage(null), 5000);
+    setToast({
+      type: "success",
+      title: "Cronograma Gerado!",
+      message: `Cronograma gerado com sucesso para ${MONTH_NAMES[currentMonth]} de ${currentYear}!`,
+    });
     setIsGeneratorModalOpen(false);
   };
 
@@ -812,14 +822,6 @@ export default function LukeRotasPage() {
         </div>
       </div>
 
-      {/* Sync Message Alert */}
-      {syncMessage && (
-        <div className="p-3.5 rounded-xl bg-brand-graphite border border-brand-gold/50 text-xs font-semibold text-brand-offwhite flex items-center space-x-3 shadow-lg animate-fadeIn">
-          <CheckCircle2 className="text-brand-gold shrink-0" size={18} />
-          <span>{syncMessage}</span>
-        </div>
-      )}
-
       {/* Navegação de Data & Controles Estilo Google Calendar */}
       <div className="bg-brand-graphite rounded-2xl border border-brand-blue/30 p-4 shadow-lg flex flex-col md:flex-row items-center justify-between gap-4">
         {/* Controles de Mês/Ano */}
@@ -877,7 +879,7 @@ export default function LukeRotasPage() {
             className="bg-brand-black border border-brand-blue/40 text-brand-offwhite text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-brand-gold"
           >
             <option value="ALL">Todos os Vendedores</option>
-            {VENDORS_LIST.map((v) => (
+            {vendorsList.map((v) => (
               <option key={v.name} value={v.name}>
                 {v.name}
               </option>
@@ -1559,15 +1561,16 @@ export default function LukeRotasPage() {
                   <span className="text-[10px] text-brand-gold font-bold">Alternância Flexível</span>
                 </div>
                 <select
-                  value={formData.vendorName || "Alisson"}
+                  value={formData.vendorName || (vendorsList[0]?.name ?? "Alisson")}
                   onChange={(e) => {
                     const vName = e.target.value;
-                    const vColor = getVendorColor(vName);
+                    const found = vendorsList.find((v) => v.name === vName);
+                    const vColor = found?.defaultColor || getVendorColor(vName);
                     setFormData({ ...formData, vendorName: vName, vendorColor: vColor });
                   }}
                   className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold font-bold"
                 >
-                  {VENDORS_LIST.map((v) => (
+                  {vendorsList.map((v) => (
                     <option key={v.name} value={v.name}>
                       {v.name} (Cor padrão do vendedor)
                     </option>
@@ -1616,11 +1619,11 @@ export default function LukeRotasPage() {
                   <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
                     Meta de Clientes
                   </label>
-                  <input
-                    type="number"
-                    value={formData.totalClients || 20}
-                    onChange={(e) => setFormData({ ...formData, totalClients: Number(e.target.value) })}
+                  <NumberInput
+                    value={formData.totalClients ?? 20}
+                    onChange={(val) => setFormData({ ...formData, totalClients: val })}
                     className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold font-mono font-bold"
+                    placeholder="20"
                   />
                 </div>
               </div>
