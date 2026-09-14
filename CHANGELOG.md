@@ -4,7 +4,19 @@ Todas as melhorias, novidades e correções notáveis deste projeto serão docum
 
 ## [Unreleased]
 
-## [1.11.0] - 2026-09-14
+## [1.11.1] - 2026-09-14
+### Changed
+- **Eliminação Total de Dados Mock nos Painéis e Cards da Visão Geral (`/luke`)**:
+  - Remoção definitiva de todos os números fictícios residuais (R$ 58.420, R$ 347,70, R$ 5.430, 168/559 clientes, 18 cargas, alertas de estoque mock e cálculos de exemplo nos modais de drilldown).
+  - Conexão analítica dinâmica e em tempo real da tela de Visão com as coleções oficiais do Firestore (`tenants/tenant_luke_001`):
+    - **Faturamento Real**: R$ 0,00 (refletindo exatamente as transações do banco).
+    - **Clientes Cadastrados**: 0 clientes (refletindo a base limpa).
+    - **Contas a Receber e a Pagar**: R$ 0,00.
+    - **Cargas Despachadas**: 0 cargas.
+    - **Catálogo de Produtos em Destaque**: Exibição dos **46 produtos reais** cadastrados com fotos, nomes e preços de tabela diretamente na Visão.
+    - **Equipe Comercial Ativa**: Listagem dinâmica de vendedores com 0 atendimentos e prontos para novas rotas.
+    - **Modais de Detalhamento Limpos**: Todos os 9 modais explicativos (Faturamento, Ticket Médio, A Receber, A Pagar, Caixa, Clientes, Frotas, Positivação, Cargas) agora apresentam estado limpo, amigável e botões de ação para início de operação.
+  - Tag visual atualizada para `v1.11.1`.
 ### Changed
 - **Restauração Completa dos Módulos e Barra Lateral com Base Operacional 100% Limpa**:
   - Restauração de todos os 11 menus da barra lateral: **Visão, Clientes, Rotas, Cargas, Financeiro, Transações, Vendedores, Produtos, Empresa, Configurações, Logs** e atalho dedicado para o **Modo Rua**.

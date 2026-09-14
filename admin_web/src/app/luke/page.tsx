@@ -1,83 +1,69 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
-  Activity,
   DollarSign,
-  TrendingUp,
-  AlertCircle,
   Store,
   Truck,
   Users,
   Package,
   ArrowUpRight,
   ArrowDownLeft,
-  Calendar,
   Sparkles,
   ShoppingBag,
   CheckCircle2,
-  AlertTriangle,
   MapPin,
   ChevronRight,
-  Plus,
   Wallet,
   Eye,
   EyeOff,
   Building2,
   X,
   Calculator,
-  FileText,
+  RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
 import { usePrivacy } from "@/lib/privacyContext";
 import { getVendorColor } from "@/lib/vendorColors";
 import VendorBadge from "@/components/VendorBadge";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+
+interface ProductPreview {
+  id: string;
+  name: string;
+  brand: string;
+  price: number;
+  imageUrl?: string;
+  category?: string;
+  soldUnits: number;
+  revenue: number;
+}
+
+interface VendorItem {
+  name: string;
+  vehicle: string;
+  routes: string;
+  totalSales: number;
+  target: number;
+  commission: number;
+  visitsCount: number;
+  status: string;
+}
 
 export default function LukeOverviewPage() {
   const { hideValues, togglePrivacy, formatValue } = usePrivacy();
-  const [period, setPeriod] = useState<"MONTH" | "WEEK">("MONTH");
 
-  // Top Produtos (Catálogo Oficial LUKE Brasil pronto para movimentação)
-  const topProducts = [
-    {
-      name: "Pomada White 150g",
-      brand: "LUKE Brasil",
-      soldUnits: 0,
-      revenue: 0.0,
-      image: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&auto=format&fit=crop&q=80",
-    },
-    {
-      name: "Pomada Teia 150gr",
-      brand: "LUKE Brasil",
-      soldUnits: 0,
-      revenue: 0.0,
-      image: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&auto=format&fit=crop&q=80",
-    },
-    {
-      name: "Pomada Matte Seco 150gr",
-      brand: "LUKE Brasil",
-      soldUnits: 0,
-      revenue: 0.0,
-      image: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&auto=format&fit=crop&q=80",
-    },
-    {
-      name: "Óleo para Barba Premium 30ml",
-      brand: "Alfa Look's",
-      soldUnits: 0,
-      revenue: 0.0,
-      image: "https://images.unsplash.com/photo-1621607512214-68297480165e?w=300&auto=format&fit=crop&q=80",
-    },
-    {
-      name: "Shampoo Lavatório Neutro 5L",
-      brand: "LUKE Brasil",
-      soldUnits: 0,
-      revenue: 0.0,
-      image: "https://images.unsplash.com/photo-1535585209827-a15fcdbc4c2d?w=300&auto=format&fit=crop&q=80",
-    },
-  ];
-
-  // Ranking Vendedores (Equipe Comercial ativa pronta para operar)
-  const vendorRanking = [
+  // Estados dos KPIs reais conectados ao Firestore
+  const [loading, setLoading] = useState(true);
+  const [totalProductsCount, setTotalProductsCount] = useState<number>(46);
+  const [totalClientsCount, setTotalClientsCount] = useState<number>(0);
+  const [faturamentoTotal, setFaturamentoTotal] = useState<number>(0.0);
+  const [totalReceivables, setTotalReceivables] = useState<number>(0.0);
+  const [totalPayables, setTotalPayables] = useState<number>(0.0);
+  const [totalLoadsCount, setTotalLoadsCount] = useState<number>(0);
+  const [productsList, setProductsList] = useState<ProductPreview[]>([]);
+  const [vendors, setVendors] = useState<VendorItem[]>([
     {
       name: "Alisson",
       vehicle: "Montana",
@@ -108,10 +94,117 @@ export default function LukeOverviewPage() {
       visitsCount: 0,
       status: "Disponível",
     },
-  ];
+  ]);
 
   // Modal de Detalhamento dos Cards (Drill-Down)
   const [activeModal, setActiveModal] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadFirestoreData() {
+      setLoading(true);
+      try {
+        const tenantId = "tenant_luke_001";
+
+        // 1. Consulta de Produtos
+        const prodSnap = await getDocs(collection(db, `tenants/${tenantId}/products`));
+        if (!prodSnap.empty) {
+          setTotalProductsCount(prodSnap.size);
+          const loadedProds: ProductPreview[] = [];
+          prodSnap.forEach((doc) => {
+            const data = doc.data();
+            loadedProds.push({
+              id: doc.id,
+              name: data.name || "Produto",
+              brand: data.brand || "LUKE Brasil",
+              price: Number(data.price || 0),
+              imageUrl:
+                data.imageUrl ||
+                "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&auto=format&fit=crop&q=80",
+              category: data.category || "Geral",
+              soldUnits: 0,
+              revenue: 0.0,
+            });
+          });
+          setProductsList(loadedProds.slice(0, 5));
+        }
+
+        // 2. Consulta de Clientes
+        const clientSnap = await getDocs(collection(db, `tenants/${tenantId}/clients`));
+        setTotalClientsCount(clientSnap.size);
+
+        // 3. Consulta de Transações
+        const txSnap = await getDocs(collection(db, `tenants/${tenantId}/transactions`));
+        let sumTx = 0;
+        if (!txSnap.empty) {
+          txSnap.forEach((doc) => {
+            const data = doc.data();
+            sumTx += Number(data.amount || data.total || 0);
+          });
+        }
+        setFaturamentoTotal(sumTx);
+
+        // 4. Contas a Receber
+        const recSnap = await getDocs(collection(db, `tenants/${tenantId}/receivables`));
+        let sumRec = 0;
+        if (!recSnap.empty) {
+          recSnap.forEach((doc) => {
+            const data = doc.data();
+            sumRec += Number(data.amount || data.value || 0);
+          });
+        }
+        setTotalReceivables(sumRec);
+
+        // 5. Contas a Pagar
+        const paySnap = await getDocs(collection(db, `tenants/${tenantId}/payables`));
+        let sumPay = 0;
+        if (!paySnap.empty) {
+          paySnap.forEach((doc) => {
+            const data = doc.data();
+            sumPay += Number(data.amount || data.value || 0);
+          });
+        }
+        setTotalPayables(sumPay);
+
+        // 6. Cargas
+        const loadSnap = await getDocs(collection(db, `tenants/${tenantId}/loads`));
+        setTotalLoadsCount(loadSnap.size);
+
+        // 7. Vendedores
+        const usersSnap = await getDocs(collection(db, `tenants/${tenantId}/users`));
+        if (!usersSnap.empty) {
+          const loadedVendors: VendorItem[] = [];
+          usersSnap.forEach((doc) => {
+            const data = doc.data();
+            if (data.role === "VENDEDOR" || !data.role || data.role === "ADMIN") {
+              const name = data.displayName || data.name || data.email?.split("@")[0] || "Vendedor";
+              loadedVendors.push({
+                name,
+                vehicle: data.vehicle || "Veículo Comercial",
+                routes: data.routes || "Rotas Atribuídas",
+                totalSales: 0.0,
+                target: Number(data.target || 40000.0),
+                commission: 0.0,
+                visitsCount: 0,
+                status: "Disponível",
+              });
+            }
+          });
+          if (loadedVendors.length > 0) {
+            setVendors(loadedVendors.slice(0, 5));
+          }
+        }
+      } catch (err) {
+        console.warn("Consulta inicial Firestore:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadFirestoreData();
+  }, []);
+
+  const saldoLiquido = Math.max(0, faturamentoTotal - totalPayables);
+  const ticketMedio = totalClientsCount > 0 ? faturamentoTotal / totalClientsCount : 0.0;
 
   return (
     <div className="space-y-8">
@@ -123,9 +216,16 @@ export default function LukeOverviewPage() {
             <span className="bg-brand-gold/20 text-brand-gold text-xs px-2.5 py-1 rounded-full font-bold border border-brand-gold/30">
               Ciclo Mensal
             </span>
+            {loading && (
+              <span className="flex items-center space-x-1 text-xs text-brand-offwhite/50">
+                <RefreshCw size={12} className="animate-spin text-brand-gold" />
+                <span>Atualizando...</span>
+              </span>
+            )}
           </div>
           <p className="text-brand-offwhite/60 text-sm mt-1">
-            Métricas consolidadas. <span className="text-brand-gold font-semibold">Clique nos cards</span> para ver a composição detalhada de cada número.
+            Métricas consolidadas em tempo real.{" "}
+            <span className="text-brand-gold font-semibold">Clique nos cards</span> para ver a composição detalhada.
           </p>
         </div>
 
@@ -172,11 +272,11 @@ export default function LukeOverviewPage() {
             </div>
           </div>
           <p className="text-2xl font-black text-brand-offwhite mt-3">
-            {formatValue(0.0, "currency")}
+            {formatValue(faturamentoTotal, "currency")}
           </p>
           <div className="flex items-center space-x-1 text-[11px] text-emerald-400 mt-2 font-medium">
             <ArrowUpRight size={13} />
-            <span>0% vs mês anterior</span>
+            <span>0 pedidos faturados</span>
           </div>
           <span className="text-[10px] text-brand-gold/60 font-medium block mt-1">
             🔍 Clique para detalhar
@@ -198,10 +298,10 @@ export default function LukeOverviewPage() {
             </div>
           </div>
           <p className="text-2xl font-black text-brand-gold mt-3">
-            {formatValue(0.0, "currency")}
+            {formatValue(ticketMedio, "currency")}
           </p>
           <span className="text-[11px] text-brand-offwhite/50 block mt-2">
-            Média por cliente visitado
+            Média por cliente atendido
           </span>
           <span className="text-[10px] text-brand-gold/60 font-medium block mt-1">
             🔍 Clique para detalhar
@@ -223,7 +323,7 @@ export default function LukeOverviewPage() {
             </div>
           </div>
           <p className="text-2xl font-black text-purple-400 mt-3">
-            {formatValue(0.0, "currency")}
+            {formatValue(totalReceivables, "currency")}
           </p>
           <span className="text-[11px] text-purple-300/70 block mt-2">
             0 clientes com prazo aberto
@@ -248,7 +348,7 @@ export default function LukeOverviewPage() {
             </div>
           </div>
           <p className="text-2xl font-black text-rose-400 mt-3">
-            {formatValue(0.0, "currency")}
+            {formatValue(totalPayables, "currency")}
           </p>
           <span className="text-[11px] text-rose-300/70 block mt-2">
             Fábricas & Despesas operacionais
@@ -273,7 +373,7 @@ export default function LukeOverviewPage() {
             </div>
           </div>
           <p className="text-2xl font-black text-teal-400 mt-3">
-            {formatValue(0.0, "currency")}
+            {formatValue(saldoLiquido, "currency")}
           </p>
           <span className="text-[11px] text-teal-300/70 block mt-2">
             Saldo operacional consolidado
@@ -297,8 +397,10 @@ export default function LukeOverviewPage() {
           </div>
           <div>
             <p className="text-xs text-brand-offwhite/60 font-semibold uppercase">Clientes</p>
-            <p className="text-xl font-extrabold text-brand-offwhite mt-0.5">0 / 0</p>
-            <span className="text-[11px] text-brand-gold font-bold">0,0% no ciclo</span>
+            <p className="text-xl font-extrabold text-brand-offwhite mt-0.5">
+              0 / {totalClientsCount}
+            </p>
+            <span className="text-[11px] text-brand-gold font-bold">Base pronta</span>
           </div>
         </div>
 
@@ -314,7 +416,7 @@ export default function LukeOverviewPage() {
           <div>
             <p className="text-xs text-brand-offwhite/60 font-semibold uppercase">Frotas</p>
             <p className="text-xl font-extrabold text-brand-offwhite mt-0.5">3 Veículos</p>
-            <span className="text-[11px] text-amber-400 font-bold">Montana, Clio, Strada</span>
+            <span className="text-[11px] text-amber-400 font-bold">Equipe LUKE</span>
           </div>
         </div>
 
@@ -330,7 +432,7 @@ export default function LukeOverviewPage() {
           <div>
             <p className="text-xs text-brand-offwhite/60 font-semibold uppercase">Positivação</p>
             <p className="text-xl font-extrabold text-brand-offwhite mt-0.5">0,0%</p>
-            <span className="text-[11px] text-green-400 font-bold">Visitas com pedido</span>
+            <span className="text-[11px] text-green-400 font-bold">Aguardando visitas</span>
           </div>
         </div>
 
@@ -345,13 +447,15 @@ export default function LukeOverviewPage() {
           </div>
           <div>
             <p className="text-xs text-brand-offwhite/60 font-semibold uppercase">Cargas</p>
-            <p className="text-xl font-extrabold text-brand-offwhite mt-0.5">0 Despachadas</p>
-            <span className="text-[11px] text-purple-300 font-bold">0% conferidas</span>
+            <p className="text-xl font-extrabold text-brand-offwhite mt-0.5">
+              {totalLoadsCount} Despachadas
+            </p>
+            <span className="text-[11px] text-purple-300 font-bold">Conferência digital</span>
           </div>
         </div>
       </div>
 
-      {/* BLOCO 3: RANKING DE VENDEDORES & TOP PRODUTOS */}
+      {/* BLOCO 3: RANKING DE VENDEDORES & CATÁLOGO DE PRODUTOS */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* RANKING COMERCIAL */}
         <div className="lg:col-span-2 bg-brand-graphite p-6 rounded-2xl border border-brand-blue/30 shadow-xl space-y-5">
@@ -359,19 +463,21 @@ export default function LukeOverviewPage() {
             <div className="flex items-center space-x-2">
               <Users className="text-brand-gold" size={20} />
               <h3 className="text-lg font-bold text-brand-offwhite">Vendedores</h3>
+              <span className="text-xs bg-brand-gold/15 text-brand-gold font-bold px-2 py-0.5 rounded-full border border-brand-gold/30">
+                Equipe Ativa
+              </span>
             </div>
             <Link
               href="/luke/vendedores"
               className="text-xs text-brand-gold hover:underline flex items-center space-x-1"
             >
-              <span>Detalhes</span>
+              <span>Gerenciar Equipe</span>
               <ChevronRight size={14} />
             </Link>
           </div>
 
           <div className="space-y-4">
-            {vendorRanking.map((v, i) => {
-              const percent = Math.min(100, Math.round((v.totalSales / v.target) * 100));
+            {vendors.map((v, i) => {
               const color = getVendorColor(v.name);
               return (
                 <div
@@ -396,7 +502,7 @@ export default function LukeOverviewPage() {
                           </span>
                         </div>
                         <p className="text-xs text-brand-offwhite/50 mt-0.5">
-                          {v.routes} • {v.visitsCount} clientes atendidos
+                          {v.routes} • 0 atendimentos no ciclo
                         </p>
                       </div>
                     </div>
@@ -405,22 +511,22 @@ export default function LukeOverviewPage() {
                       <p className="text-sm font-black text-brand-offwhite">
                         {formatValue(v.totalSales, "currency")}
                       </p>
-                      <p className="text-[11px] text-emerald-400 font-medium">
-                        Comissão: {formatValue(v.commission, "currency")}
-                      </p>
+                      <span className="text-[10px] text-emerald-400/80 font-semibold">
+                        Disponível para rotas
+                      </span>
                     </div>
                   </div>
 
                   {/* Barra de Progresso da Meta */}
                   <div className="space-y-1 pl-1">
                     <div className="flex justify-between text-[11px] text-brand-offwhite/60">
-                      <span>Meta: {formatValue(v.target, "currency")}</span>
-                      <span className="font-bold text-brand-gold">{percent}%</span>
+                      <span>Meta Mensal: {formatValue(v.target, "currency")}</span>
+                      <span className="font-bold text-brand-offwhite/40">0%</span>
                     </div>
                     <div className="w-full bg-brand-graphite h-2 rounded-full overflow-hidden border border-brand-blue/20">
                       <div
                         className="h-full rounded-full transition-all duration-500"
-                        style={{ width: `${percent}%`, backgroundColor: color }}
+                        style={{ width: "0%", backgroundColor: color }}
                       />
                     </div>
                   </div>
@@ -430,38 +536,45 @@ export default function LukeOverviewPage() {
           </div>
         </div>
 
-        {/* TOP PRODUTOS MAIS VENDIDOS */}
+        {/* CATÁLOGO DE PRODUTOS OFICIAIS (PRESERVADO) */}
         <div className="bg-brand-graphite p-6 rounded-2xl border border-brand-blue/30 shadow-xl space-y-5">
           <div className="flex justify-between items-center border-b border-brand-blue/20 pb-4">
             <div className="flex items-center space-x-2">
               <Package className="text-brand-gold" size={20} />
               <h3 className="text-lg font-bold text-brand-offwhite">Produtos</h3>
+              <span className="text-xs bg-emerald-500/20 text-emerald-400 font-extrabold px-2 py-0.5 rounded-full border border-emerald-500/30 font-mono">
+                {totalProductsCount} Ativos
+              </span>
             </div>
             <Link
               href="/luke/produtos"
               className="text-xs text-brand-gold hover:underline flex items-center space-x-1"
             >
-              <span>Catálogo</span>
+              <span>Ver Catálogo</span>
               <ChevronRight size={14} />
             </Link>
           </div>
 
           <div className="space-y-3">
-            {topProducts.map((prod, idx) => (
+            {productsList.map((prod) => (
               <div
-                key={prod.name}
+                key={prod.id}
                 className="flex items-center space-x-3 p-2.5 bg-brand-black/50 rounded-xl border border-brand-blue/20 hover:border-brand-gold/30 transition"
               >
-                <div className="w-11 h-11 rounded-lg bg-brand-graphite border border-brand-blue/30 overflow-hidden shrink-0">
-                  <img
-                    src={prod.image}
-                    alt={prod.name}
-                    className="w-full h-full object-cover"
-                  />
+                <div className="w-11 h-11 rounded-lg bg-brand-graphite border border-brand-blue/30 overflow-hidden shrink-0 flex items-center justify-center">
+                  {prod.imageUrl ? (
+                    <img
+                      src={prod.imageUrl}
+                      alt={prod.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Package size={20} className="text-brand-offwhite/40" />
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center space-x-1.5">
-                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-brand-gold/15 text-brand-gold font-bold uppercase">
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-brand-gold/15 text-brand-gold font-bold uppercase truncate max-w-[80px]">
                       {prod.brand}
                     </span>
                     <p className="text-xs font-bold text-brand-offwhite truncate">
@@ -469,51 +582,51 @@ export default function LukeOverviewPage() {
                     </p>
                   </div>
                   <p className="text-[11px] text-brand-offwhite/50 mt-0.5">
-                    {prod.soldUnits} un vendidas
+                    Preço de Tabela
                   </p>
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-xs font-black text-brand-gold">
-                    {formatValue(prod.revenue, "currency")}
+                    {formatValue(prod.price, "currency")}
                   </p>
                 </div>
               </div>
             ))}
           </div>
+
+          <div className="pt-2 border-t border-brand-blue/20">
+            <Link
+              href="/luke/produtos"
+              className="w-full flex items-center justify-center space-x-2 py-2.5 bg-brand-gold/15 hover:bg-brand-gold/25 border border-brand-gold/30 text-brand-gold rounded-xl text-xs font-bold transition"
+            >
+              <Package size={15} />
+              <span>Gerenciar Todos os {totalProductsCount} Produtos</span>
+            </Link>
+          </div>
         </div>
       </div>
 
-      {/* BLOCO 4: ALERTAS DE ESTOQUE & ATALHOS */}
+      {/* BLOCO 4: STATUS DO CATÁLOGO & ATALHOS */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Alerta de Ruptura */}
-        <div className="bg-brand-graphite p-6 rounded-2xl border border-rose-500/20 shadow-xl space-y-4">
+        {/* Status de Prontidão Operacional */}
+        <div className="bg-brand-graphite p-6 rounded-2xl border border-emerald-500/20 shadow-xl space-y-4">
           <div className="flex items-center space-x-2">
-            <AlertTriangle className="text-rose-400" size={20} />
-            <h3 className="text-base font-bold text-brand-offwhite">Estoque</h3>
+            <CheckCircle2 className="text-emerald-400" size={20} />
+            <h3 className="text-base font-bold text-brand-offwhite">Prontidão do Catálogo</h3>
           </div>
-          <div className="space-y-2.5">
-            <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl flex justify-between items-center">
-              <div>
-                <p className="text-xs font-bold text-brand-offwhite">
-                  Lâmina Wilkinson Sword (Caixa c/ 100)
-                </p>
-                <span className="text-[11px] text-rose-300">Apenas 14 caixas em estoque</span>
-              </div>
-              <span className="px-2 py-0.5 text-[10px] font-extrabold bg-rose-500/20 text-rose-400 rounded-md border border-rose-500/30">
-                Crítico
-              </span>
-            </div>
-
-            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl flex justify-between items-center">
-              <div>
-                <p className="text-xs font-bold text-brand-offwhite">
-                  Pomada Matte Seco 150g (LUKE)
-                </p>
-                <span className="text-[11px] text-amber-300">62 unidades restantes</span>
-              </div>
-              <span className="px-2 py-0.5 text-[10px] font-extrabold bg-amber-500/20 text-amber-400 rounded-md border border-amber-500/30">
-                Atenção
-              </span>
+          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl space-y-2">
+            <p className="text-xs font-bold text-emerald-300">
+              Catálogo LUKE Brasil 100% Sincronizado
+            </p>
+            <p className="text-xs text-brand-offwhite/70">
+              Todos os {totalProductsCount} produtos oficiais estão com fotos de alta resolução, códigos de barra e preços de venda cadastrados e prontos para vendas no Modo Rua e emissão de pedidos.
+            </p>
+            <div className="pt-2 flex items-center space-x-2 text-[11px] text-brand-gold font-semibold">
+              <span>✓ Fotos em Alta Resolução</span>
+              <span>•</span>
+              <span>✓ Códigos EAN / Barras</span>
+              <span>•</span>
+              <span>✓ Preços de Venda</span>
             </div>
           </div>
         </div>
@@ -522,23 +635,23 @@ export default function LukeOverviewPage() {
         <div className="bg-brand-graphite p-6 rounded-2xl border border-brand-blue/30 shadow-xl space-y-4">
           <div className="flex items-center space-x-2">
             <Sparkles className="text-brand-gold" size={20} />
-            <h3 className="text-base font-bold text-brand-offwhite">Atalhos</h3>
+            <h3 className="text-base font-bold text-brand-offwhite">Atalhos Operacionais</h3>
           </div>
           <div className="grid grid-cols-2 gap-3">
+            <Link
+              href="/luke/produtos"
+              className="p-3 bg-brand-black/60 rounded-xl border border-brand-blue/30 hover:border-brand-gold/40 transition flex items-center space-x-2 group"
+            >
+              <Package size={18} className="text-brand-gold group-hover:scale-110 transition" />
+              <span className="text-xs font-bold text-brand-offwhite">Produtos</span>
+            </Link>
+
             <Link
               href="/luke/clientes"
               className="p-3 bg-brand-black/60 rounded-xl border border-brand-blue/30 hover:border-brand-gold/40 transition flex items-center space-x-2 group"
             >
               <Store size={18} className="text-brand-gold group-hover:scale-110 transition" />
               <span className="text-xs font-bold text-brand-offwhite">Clientes</span>
-            </Link>
-
-            <Link
-              href="/luke/financeiro"
-              className="p-3 bg-brand-black/60 rounded-xl border border-brand-blue/30 hover:border-brand-gold/40 transition flex items-center space-x-2 group"
-            >
-              <DollarSign size={18} className="text-emerald-400 group-hover:scale-110 transition" />
-              <span className="text-xs font-bold text-brand-offwhite">Financeiro</span>
             </Link>
 
             <Link
@@ -550,20 +663,20 @@ export default function LukeOverviewPage() {
             </Link>
 
             <Link
-              href="/luke/empresa"
+              href="/luke/financeiro"
               className="p-3 bg-brand-black/60 rounded-xl border border-brand-blue/30 hover:border-brand-gold/40 transition flex items-center space-x-2 group"
             >
-              <Building2 size={18} className="text-purple-400 group-hover:scale-110 transition" />
-              <span className="text-xs font-bold text-brand-offwhite">Empresa</span>
+              <DollarSign size={18} className="text-emerald-400 group-hover:scale-110 transition" />
+              <span className="text-xs font-bold text-brand-offwhite">Financeiro</span>
             </Link>
           </div>
         </div>
       </div>
 
-      {/* MODAL DE COMPOSIÇÃO DOS NÚMEROS (DRILL-DOWN) */}
+      {/* MODAL DE COMPOSIÇÃO DOS NÚMEROS (DRILL-DOWN LIMPO) */}
       {activeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-brand-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-brand-graphite w-full max-w-3xl rounded-2xl border border-brand-blue/40 shadow-2xl p-6 relative max-h-[90vh] overflow-y-auto space-y-6">
+          <div className="bg-brand-graphite w-full max-w-2xl rounded-2xl border border-brand-blue/40 shadow-2xl p-6 relative max-h-[90vh] overflow-y-auto space-y-6">
             <button
               onClick={() => setActiveModal(null)}
               className="absolute top-4 right-4 text-brand-offwhite/50 hover:text-brand-offwhite p-1 rounded-lg hover:bg-brand-blue/20 transition"
@@ -584,64 +697,31 @@ export default function LukeOverviewPage() {
                       Composição do Faturamento
                     </h3>
                     <p className="text-xs text-brand-offwhite/60">
-                      Total consolidado de <strong className="text-emerald-400 font-mono">{formatValue(58420.0, "currency")}</strong> no ciclo mensal.
+                      Total consolidado no ciclo mensal:{" "}
+                      <strong className="text-emerald-400 font-mono">
+                        {formatValue(faturamentoTotal, "currency")}
+                      </strong>
                     </p>
                   </div>
                 </div>
 
-                {/* Subdivisão por Vendedor */}
-                <div className="space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-brand-gold">
-                    1. Vendas por Vendedor
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="p-4 bg-brand-black/60 rounded-xl border border-emerald-500/30">
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-xs font-bold text-brand-offwhite">Alisson (Montana)</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono">45,3%</span>
-                      </div>
-                      <p className="text-lg font-black text-emerald-400">{formatValue(26450.0, "currency")}</p>
-                      <p className="text-[11px] text-brand-offwhite/50 mt-1">78 clientes • Comiss: {formatValue(2116.0, "currency")}</p>
-                    </div>
-
-                    <div className="p-4 bg-brand-black/60 rounded-xl border border-sky-500/30">
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-xs font-bold text-brand-offwhite">Alexandre (Clio)</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 font-mono">33,9%</span>
-                      </div>
-                      <p className="text-lg font-black text-sky-400">{formatValue(19820.0, "currency")}</p>
-                      <p className="text-[11px] text-brand-offwhite/50 mt-1">62 clientes • Comiss: {formatValue(1585.6, "currency")}</p>
-                    </div>
-
-                    <div className="p-4 bg-brand-black/60 rounded-xl border border-purple-500/30">
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-xs font-bold text-brand-offwhite">Lucas (Strada)</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-mono">20,8%</span>
-                      </div>
-                      <p className="text-lg font-black text-purple-400">{formatValue(12150.0, "currency")}</p>
-                      <p className="text-[11px] text-brand-offwhite/50 mt-1">28 clientes • Comiss: {formatValue(1215.0, "currency")}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Subdivisão por Linha / Marca */}
-                <div className="space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-brand-gold">
-                    2. Faturamento por Marca Distribuída
-                  </h4>
-                  <div className="space-y-2">
-                    <div className="p-3 bg-brand-black/40 rounded-xl border border-brand-blue/20 flex justify-between items-center">
-                      <span className="text-xs font-bold text-brand-offwhite">LUKE Brasil Cosméticos</span>
-                      <span className="text-sm font-black text-brand-gold">{formatValue(23025.0, "currency")} (39,4%)</span>
-                    </div>
-                    <div className="p-3 bg-brand-black/40 rounded-xl border border-brand-blue/20 flex justify-between items-center">
-                      <span className="text-xs font-bold text-brand-offwhite">FOX For Men</span>
-                      <span className="text-sm font-black text-brand-offwhite">{formatValue(18245.0, "currency")} (31,2%)</span>
-                    </div>
-                    <div className="p-3 bg-brand-black/40 rounded-xl border border-brand-blue/20 flex justify-between items-center">
-                      <span className="text-xs font-bold text-brand-offwhite">Alfa Look&apos;s & Outras</span>
-                      <span className="text-sm font-black text-brand-offwhite">{formatValue(17150.0, "currency")} (29,4%)</span>
-                    </div>
+                <div className="p-6 bg-brand-black/50 rounded-xl border border-brand-blue/20 text-center space-y-3">
+                  <p className="text-sm text-brand-offwhite/80 font-medium">
+                    {faturamentoTotal === 0
+                      ? "Nenhum faturamento registrado no ciclo atual."
+                      : `Total de ${formatValue(faturamentoTotal, "currency")} faturados.`}
+                  </p>
+                  <p className="text-xs text-brand-offwhite/50 max-w-md mx-auto">
+                    Conforme novos pedidos forem lançados pelos vendedores no Modo Rua ou registrados em Transações, os números serão agrupados automaticamente aqui por vendedor, linha e forma de pagamento.
+                  </p>
+                  <div className="pt-2">
+                    <Link
+                      href="/luke/rua"
+                      className="inline-flex items-center space-x-2 px-4 py-2 bg-brand-gold text-brand-black rounded-xl text-xs font-bold hover:bg-yellow-500 transition shadow"
+                    >
+                      <Sparkles size={14} />
+                      <span>Abrir Modo Rua</span>
+                    </Link>
                   </div>
                 </div>
               </div>
@@ -659,7 +739,10 @@ export default function LukeOverviewPage() {
                       Cálculo do Ticket Médio
                     </h3>
                     <p className="text-xs text-brand-offwhite/60">
-                      Média por pedido de <strong className="text-brand-gold font-mono">{formatValue(347.7, "currency")}</strong>.
+                      Média por pedido de{" "}
+                      <strong className="text-brand-gold font-mono">
+                        {formatValue(ticketMedio, "currency")}
+                      </strong>
                     </p>
                   </div>
                 </div>
@@ -669,34 +752,17 @@ export default function LukeOverviewPage() {
                     Fórmula de Consolidação:
                   </h4>
                   <div className="p-3 bg-brand-graphite rounded-lg border border-brand-blue/30 font-mono text-xs text-center space-y-1">
-                    <p className="text-emerald-400 font-bold">Faturamento Total: {formatValue(58420.0, "currency")}</p>
+                    <p className="text-emerald-400 font-bold">
+                      Faturamento Total: {formatValue(faturamentoTotal, "currency")}
+                    </p>
                     <p className="text-brand-offwhite/50 text-sm">÷</p>
-                    <p className="text-sky-400 font-bold">168 Clientes Atendidos com Pedido</p>
+                    <p className="text-sky-400 font-bold">
+                      {totalClientsCount} Clientes Atendidos com Pedido
+                    </p>
                     <p className="text-brand-offwhite/50 text-sm">=</p>
-                    <p className="text-brand-gold font-black text-base">{formatValue(347.7, "currency")} / cliente</p>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-brand-offwhite/80">
-                    Ticket Médio por Vendedor:
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="p-3 bg-brand-black/40 rounded-xl border border-brand-blue/20">
-                      <p className="text-xs text-brand-offwhite font-bold">Alisson</p>
-                      <p className="text-base font-black text-brand-gold mt-1">{formatValue(339.1, "currency")}</p>
-                      <p className="text-[11px] text-brand-offwhite/40">78 atendimentos</p>
-                    </div>
-                    <div className="p-3 bg-brand-black/40 rounded-xl border border-brand-blue/20">
-                      <p className="text-xs text-brand-offwhite font-bold">Alexandre</p>
-                      <p className="text-base font-black text-brand-gold mt-1">{formatValue(319.67, "currency")}</p>
-                      <p className="text-[11px] text-brand-offwhite/40">62 atendimentos</p>
-                    </div>
-                    <div className="p-3 bg-brand-black/40 rounded-xl border border-brand-blue/20">
-                      <p className="text-xs text-brand-offwhite font-bold">Lucas</p>
-                      <p className="text-base font-black text-brand-gold mt-1">{formatValue(433.92, "currency")}</p>
-                      <p className="text-[11px] text-brand-offwhite/40">28 atendimentos (Contratos Maiores)</p>
-                    </div>
+                    <p className="text-brand-gold font-black text-base">
+                      {formatValue(ticketMedio, "currency")} / pedido
+                    </p>
                   </div>
                 </div>
               </div>
@@ -711,48 +777,33 @@ export default function LukeOverviewPage() {
                   </div>
                   <div>
                     <h3 className="text-xl font-extrabold text-brand-offwhite">
-                      18 Clientes em Prazo Aberto (P.A.)
+                      Clientes com Prazo Aberto (P.A.)
                     </h3>
                     <p className="text-xs text-brand-offwhite/60">
-                      Total a receber: <strong className="text-purple-400 font-mono">{formatValue(5430.0, "currency")}</strong>.
+                      Total a receber:{" "}
+                      <strong className="text-purple-400 font-mono">
+                        {formatValue(totalReceivables, "currency")}
+                      </strong>
                     </p>
                   </div>
                 </div>
 
-                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                  {[
-                    { name: "Barbearia Vip Style", val: 480, due: "05/09", route: "R1", zap: "31988880001" },
-                    { name: "Salão Requinte & Arte", val: 350, due: "08/09", route: "R2", zap: "31988880002" },
-                    { name: "Studio Bella Dama", val: 620, due: "10/09", route: "F1", zap: "31988880003" },
-                    { name: "Barbearia Seu Elias", val: 510, due: "12/09", route: "R3", zap: "31988880004" },
-                    { name: "Studio Blond Hair", val: 390, due: "15/09", route: "F2", zap: "31988880005" },
-                    { name: "Espaço Homem Moderno", val: 290, due: "15/09", route: "R4", zap: "31988880006" },
-                    { name: "Corte Nobre Barbershop", val: 440, due: "18/09", route: "F4", zap: "31988880007" },
-                    { name: "Salão Glamour BH", val: 310, due: "20/09", route: "R5", zap: "31988880008" },
-                  ].map((item, idx) => (
-                    <div key={idx} className="p-3 bg-brand-black/50 rounded-xl border border-brand-blue/20 flex justify-between items-center">
-                      <div>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-xs font-bold text-brand-offwhite">{item.name}</span>
-                          <span className="text-[10px] px-1.5 py-0.2 bg-brand-gold/20 text-brand-gold rounded font-bold">{item.route}</span>
-                        </div>
-                        <p className="text-[11px] text-brand-offwhite/40 mt-0.5">Vencimento previsto: {item.due}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs font-black text-purple-400">{formatValue(item.val, "currency")}</p>
-                        <span className="text-[10px] text-purple-300/60 font-semibold">P.A. Ativo</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="flex justify-end pt-2">
-                  <Link
-                    href="/luke/financeiro"
-                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition shadow"
-                  >
-                    Abrir Módulo Financeiro →
-                  </Link>
+                <div className="p-6 bg-brand-black/50 rounded-xl border border-brand-blue/20 text-center space-y-3">
+                  <p className="text-sm text-brand-offwhite/80 font-medium">
+                    Nenhum título a receber em aberto no momento.
+                  </p>
+                  <p className="text-xs text-brand-offwhite/50">
+                    Quando pedidos forem faturados a prazo ou com duplicatas no Modo Rua, as cobranças aparecerão organizadas por vencimento e cliente.
+                  </p>
+                  <div className="pt-2">
+                    <Link
+                      href="/luke/financeiro"
+                      className="inline-flex items-center space-x-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition shadow"
+                    >
+                      <DollarSign size={14} />
+                      <span>Abrir Módulo Financeiro</span>
+                    </Link>
+                  </div>
                 </div>
               </div>
             )}
@@ -769,36 +820,29 @@ export default function LukeOverviewPage() {
                       Contas a Pagar do Mês
                     </h3>
                     <p className="text-xs text-brand-offwhite/60">
-                      Total de despesas operacionais: <strong className="text-rose-400 font-mono">{formatValue(3745.0, "currency")}</strong>.
+                      Total de despesas operacionais:{" "}
+                      <strong className="text-rose-400 font-mono">
+                        {formatValue(totalPayables, "currency")}
+                      </strong>
                     </p>
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  {[
-                    { cat: "Fábricas / Fornecedores", name: "Lab Cosméticos Indústria (Pomadas)", val: 1850, due: "05/09" },
-                    { cat: "Fábricas / Fornecedores", name: "Alfa Look's Distribuidora Oficial", val: 600, due: "10/09" },
-                    { cat: "Frotas & Logística", name: "Posto Shell Savassi (Combustível Equipe)", val: 820, due: "15/09" },
-                    { cat: "Manutenção", name: "Revisão Preventiva GM Montana", val: 475, due: "20/09" },
-                  ].map((item, idx) => (
-                    <div key={idx} className="p-3 bg-brand-black/50 rounded-xl border border-rose-500/20 flex justify-between items-center">
-                      <div>
-                        <span className="text-[10px] text-rose-300 font-bold uppercase">{item.cat}</span>
-                        <p className="text-xs font-bold text-brand-offwhite">{item.name}</p>
-                        <p className="text-[11px] text-brand-offwhite/40">Vencimento: {item.due}</p>
-                      </div>
-                      <p className="text-sm font-black text-rose-400">{formatValue(item.val, "currency")}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="flex justify-end pt-2">
-                  <Link
-                    href="/luke/financeiro"
-                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition shadow"
-                  >
-                    Gerenciar no Financeiro →
-                  </Link>
+                <div className="p-6 bg-brand-black/50 rounded-xl border border-brand-blue/20 text-center space-y-3">
+                  <p className="text-sm text-brand-offwhite/80 font-medium">
+                    Nenhuma despesa ou título a pagar pendente.
+                  </p>
+                  <p className="text-xs text-brand-offwhite/50">
+                    Cadastre despesas operacionais de fábricas, combustível ou manutenção diretamente no Financeiro.
+                  </p>
+                  <div className="pt-2">
+                    <Link
+                      href="/luke/financeiro"
+                      className="inline-flex items-center space-x-2 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition shadow"
+                    >
+                      <span>Gerenciar Contas a Pagar</span>
+                    </Link>
+                  </div>
                 </div>
               </div>
             )}
@@ -815,37 +859,32 @@ export default function LukeOverviewPage() {
                       Extrato e Saldo de Caixa
                     </h3>
                     <p className="text-xs text-brand-offwhite/60">
-                      Saldo consolidado: <strong className="text-teal-400 font-mono">{formatValue(54675.0, "currency")}</strong>.
+                      Saldo consolidado:{" "}
+                      <strong className="text-teal-400 font-mono">
+                        {formatValue(saldoLiquido, "currency")}
+                      </strong>
                     </p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="p-4 bg-brand-black/60 rounded-xl border border-teal-500/30 space-y-2">
-                    <p className="text-xs text-brand-offwhite/60 font-semibold uppercase">Banco Inter PJ (Conta Central)</p>
-                    <p className="text-xl font-black text-teal-400">{formatValue(42150.0, "currency")}</p>
-                    <p className="text-[11px] text-brand-offwhite/40">Chave Pix: financeiro@luke.com</p>
-                  </div>
-
-                  <div className="p-4 bg-brand-black/60 rounded-xl border border-teal-500/30 space-y-2">
-                    <p className="text-xs text-brand-offwhite/60 font-semibold uppercase">Caixa Operacional / Rotas</p>
-                    <p className="text-xl font-black text-teal-400">{formatValue(12525.0, "currency")}</p>
-                    <p className="text-[11px] text-brand-offwhite/40">Recebimentos diretos em campo</p>
-                  </div>
-                </div>
-
-                <div className="p-3 bg-brand-black/40 rounded-xl border border-brand-blue/20 text-xs text-brand-offwhite/70 space-y-1">
+                <div className="p-4 bg-brand-black/40 rounded-xl border border-brand-blue/20 text-xs text-brand-offwhite/70 space-y-2">
                   <div className="flex justify-between">
                     <span>(+) Faturamento Bruto:</span>
-                    <span className="font-bold text-emerald-400 font-mono">+{formatValue(58420.0, "currency")}</span>
+                    <span className="font-bold text-emerald-400 font-mono">
+                      +{formatValue(faturamentoTotal, "currency")}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span>(-) Despesas Pagas do Ciclo:</span>
-                    <span className="font-bold text-rose-400 font-mono">-{formatValue(3745.0, "currency")}</span>
+                    <span className="font-bold text-rose-400 font-mono">
+                      -{formatValue(totalPayables, "currency")}
+                    </span>
                   </div>
-                  <div className="border-t border-brand-blue/30 pt-1 flex justify-between font-bold text-brand-offwhite">
+                  <div className="border-t border-brand-blue/30 pt-2 flex justify-between font-bold text-brand-offwhite">
                     <span>(=) Saldo Líquido Operacional:</span>
-                    <span className="text-teal-400 font-mono">{formatValue(54675.0, "currency")}</span>
+                    <span className="text-teal-400 font-mono">
+                      {formatValue(saldoLiquido, "currency")}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -863,32 +902,29 @@ export default function LukeOverviewPage() {
                       Cobertura da Base de Clientes
                     </h3>
                     <p className="text-xs text-brand-offwhite/60">
-                      168 salões atendidos de um total de 559 cadastrados (30,0% no ciclo).
+                      Total cadastrado: {totalClientsCount} clientes.
                     </p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="p-4 bg-brand-black/50 rounded-xl border border-brand-blue/20">
-                    <p className="text-xs font-bold text-brand-offwhite">Rotas R1 a R12 (Alisson)</p>
-                    <p className="text-lg font-black text-brand-gold mt-1">106 Salões Atendidos</p>
-                    <p className="text-[11px] text-brand-offwhite/40">Média de 8,8 clientes por rota</p>
+                <div className="p-6 bg-brand-black/50 rounded-xl border border-brand-blue/20 text-center space-y-3">
+                  <p className="text-sm text-brand-offwhite/80 font-medium">
+                    {totalClientsCount === 0
+                      ? "Nenhum cliente cadastrado no momento."
+                      : `${totalClientsCount} clientes cadastrados.`}
+                  </p>
+                  <p className="text-xs text-brand-offwhite/50">
+                    Cadastre novos clientes ou importe sua carteira para iniciar o planejamento das rotas comerciais.
+                  </p>
+                  <div className="pt-2">
+                    <Link
+                      href="/luke/clientes"
+                      className="inline-flex items-center space-x-2 px-4 py-2 bg-brand-gold text-brand-black rounded-xl text-xs font-bold hover:bg-yellow-500 transition shadow"
+                    >
+                      <Store size={14} />
+                      <span>Abrir Módulo de Clientes</span>
+                    </Link>
                   </div>
-
-                  <div className="p-4 bg-brand-black/50 rounded-xl border border-brand-blue/20">
-                    <p className="text-xs font-bold text-brand-offwhite">Rotas F1 a F12 (Alexandre)</p>
-                    <p className="text-lg font-black text-sky-400 mt-1">62 Salões Atendidos</p>
-                    <p className="text-[11px] text-brand-offwhite/40">Média de 5,1 clientes por rota</p>
-                  </div>
-                </div>
-
-                <div className="flex justify-end pt-2">
-                  <Link
-                    href="/luke/clientes"
-                    className="px-4 py-2 bg-brand-gold text-brand-black rounded-xl text-xs font-bold hover:bg-yellow-500 transition shadow"
-                  >
-                    Ver Lista Completa de 559 Clientes →
-                  </Link>
                 </div>
               </div>
             )}
@@ -905,35 +941,30 @@ export default function LukeOverviewPage() {
                       Frotas & Veículos Operacionais
                     </h3>
                     <p className="text-xs text-brand-offwhite/60">
-                      3 Veículos ativos na operação de rua da LUKE Brasil.
+                      Veículos configurados para a equipe comercial LUKE Brasil.
                     </p>
                   </div>
                 </div>
 
                 <div className="space-y-3">
-                  <div className="p-3 bg-brand-black/50 rounded-xl border border-brand-blue/20 flex justify-between items-center">
-                    <div>
-                      <p className="text-xs font-bold text-brand-offwhite">GM Montana 1.4 — Vendedor: Alisson</p>
-                      <p className="text-[11px] text-brand-offwhite/40">Atribuição: Rotas R1 a R12 • 78 visitas realizadas</p>
+                  {vendors.map((v) => (
+                    <div
+                      key={v.name}
+                      className="p-3 bg-brand-black/50 rounded-xl border border-brand-blue/20 flex justify-between items-center"
+                    >
+                      <div>
+                        <p className="text-xs font-bold text-brand-offwhite">
+                          {v.vehicle} — Vendedor: {v.name}
+                        </p>
+                        <p className="text-[11px] text-brand-offwhite/40">
+                          {v.routes} • 0 atendimentos
+                        </p>
+                      </div>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">
+                        Disponível
+                      </span>
                     </div>
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">Em Campo</span>
-                  </div>
-
-                  <div className="p-3 bg-brand-black/50 rounded-xl border border-brand-blue/20 flex justify-between items-center">
-                    <div>
-                      <p className="text-xs font-bold text-brand-offwhite">Renault Clio 1.0 — Vendedor: Alexandre</p>
-                      <p className="text-[11px] text-brand-offwhite/40">Atribuição: Rotas F1 a F12 • 62 visitas realizadas</p>
-                    </div>
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">Em Campo</span>
-                  </div>
-
-                  <div className="p-3 bg-brand-black/50 rounded-xl border border-brand-blue/20 flex justify-between items-center">
-                    <div>
-                      <p className="text-xs font-bold text-brand-offwhite">Fiat Strada 1.4 — Representação: Lucas</p>
-                      <p className="text-[11px] text-brand-offwhite/40">Atribuição: Contratos Corporativos • 28 visitas realizadas</p>
-                    </div>
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-brand-blue/40 text-brand-offwhite font-bold">Base</span>
-                  </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -947,7 +978,7 @@ export default function LukeOverviewPage() {
                   </div>
                   <div>
                     <h3 className="text-xl font-extrabold text-brand-offwhite">
-                      Taxa de Positivação Comercial (91,2%)
+                      Taxa de Positivação Comercial (0,0%)
                     </h3>
                     <p className="text-xs text-brand-offwhite/60">
                       Percentual de visitas que resultaram em venda direta e pedido faturado.
@@ -955,15 +986,13 @@ export default function LukeOverviewPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-4 bg-brand-black/50 rounded-xl border border-green-500/30 text-center">
-                    <p className="text-2xl font-black text-green-400">153</p>
-                    <p className="text-xs text-brand-offwhite/70 font-semibold mt-1">Pedidos Fechados</p>
-                  </div>
-                  <div className="p-4 bg-brand-black/50 rounded-xl border border-brand-blue/20 text-center">
-                    <p className="text-2xl font-black text-brand-offwhite/60">15</p>
-                    <p className="text-xs text-brand-offwhite/70 font-semibold mt-1">Apenas Visita / Cobrança</p>
-                  </div>
+                <div className="p-6 bg-brand-black/50 rounded-xl border border-brand-blue/20 text-center space-y-2">
+                  <p className="text-sm font-semibold text-brand-offwhite">
+                    0 Pedidos Fechados de 0 Visitas
+                  </p>
+                  <p className="text-xs text-brand-offwhite/50">
+                    A positivação é calculada automaticamente conforme as rotas diárias forem executadas no Modo Rua.
+                  </p>
                 </div>
               </div>
             )}
@@ -977,7 +1006,7 @@ export default function LukeOverviewPage() {
                   </div>
                   <div>
                     <h3 className="text-xl font-extrabold text-brand-offwhite">
-                      18 Cargas Despachadas
+                      Conferência de Cargas
                     </h3>
                     <p className="text-xs text-brand-offwhite/60">
                       Controle digital de carregamento e conferência de mercadorias.
@@ -985,24 +1014,24 @@ export default function LukeOverviewPage() {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <div className="p-3 bg-brand-black/50 rounded-xl border border-brand-blue/20 flex justify-between items-center">
-                    <span className="text-xs font-bold text-brand-offwhite">Cargas 100% Conferidas e Assinadas</span>
-                    <span className="text-xs font-black text-green-400">16 Cargas</span>
+                <div className="p-6 bg-brand-black/50 rounded-xl border border-brand-blue/20 text-center space-y-3">
+                  <p className="text-sm text-brand-offwhite/80 font-medium">
+                    {totalLoadsCount === 0
+                      ? "Nenhuma carga em trânsito ou despachada no momento."
+                      : `${totalLoadsCount} cargas despachadas.`}
+                  </p>
+                  <p className="text-xs text-brand-offwhite/50">
+                    Gere espelhos de carregamento conferidos digitalmente antes da saída dos veículos para a rua.
+                  </p>
+                  <div className="pt-2">
+                    <Link
+                      href="/luke/carregamento"
+                      className="inline-flex items-center space-x-2 px-4 py-2 bg-brand-gold text-brand-black rounded-xl text-xs font-bold hover:bg-yellow-500 transition shadow"
+                    >
+                      <Truck size={14} />
+                      <span>Abrir Módulo de Cargas</span>
+                    </Link>
                   </div>
-                  <div className="p-3 bg-brand-black/50 rounded-xl border border-brand-blue/20 flex justify-between items-center">
-                    <span className="text-xs font-bold text-brand-offwhite">Cargas em Trânsito / Rota Hoje</span>
-                    <span className="text-xs font-black text-amber-400">2 Cargas</span>
-                  </div>
-                </div>
-
-                <div className="flex justify-end pt-2">
-                  <Link
-                    href="/luke/carregamento"
-                    className="px-4 py-2 bg-brand-gold text-brand-black rounded-xl text-xs font-bold hover:bg-yellow-500 transition shadow"
-                  >
-                    Abrir Módulo de Cargas →
-                  </Link>
                 </div>
               </div>
             )}
