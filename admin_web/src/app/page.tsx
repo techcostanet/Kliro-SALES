@@ -41,10 +41,10 @@ export default function UnifiedLoginPage() {
           const tenantId = mappingData?.tenantId;
 
           if (tenantId === "tenant_luke_001" || cleanEmail.includes("luke")) {
-            router.push("/luke/produtos");
+            router.push("/luke");
             return;
           } else if (tenantId) {
-            router.push(`/dashboard/produtos`);
+            router.push(`/dashboard`);
             return;
           }
         }
@@ -54,10 +54,10 @@ export default function UnifiedLoginPage() {
 
       // Caso 3: Usuários da empresa LUKE Brasil (fallback por e-mail)
       if (cleanEmail.includes("luke") || cleanEmail === "admin@luke.com" || cleanEmail === "lucas@luke.com") {
-        router.push("/luke/produtos");
+        router.push("/luke");
       } else {
         // Padrão de entrada
-        router.push("/luke/produtos");
+        router.push("/luke");
       }
 
     } catch (err: any) {

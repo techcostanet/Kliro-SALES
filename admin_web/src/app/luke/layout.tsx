@@ -66,7 +66,17 @@ function LukeSidebarContent({ children }: { children: React.ReactNode }) {
   };
 
   const navLinks: { label: string; href: string; icon: any; exact?: boolean; permissionKey: MenuPermissionKey }[] = [
+    { label: "Visão", href: "/luke", icon: LayoutDashboard, exact: true, permissionKey: "visao" },
+    { label: "Clientes", href: "/luke/clientes", icon: Store, permissionKey: "clientes" },
+    { label: "Rotas", href: "/luke/rotas", icon: Map, permissionKey: "rotas" },
+    { label: "Cargas", href: "/luke/carregamento", icon: Truck, permissionKey: "carregamento" },
+    { label: "Financeiro", href: "/luke/financeiro", icon: DollarSign, permissionKey: "financeiro" },
+    { label: "Transações", href: "/luke/transacoes", icon: Wallet, permissionKey: "transacoes" },
+    { label: "Vendedores", href: "/luke/vendedores", icon: Users, permissionKey: "vendedores" },
     { label: "Produtos", href: "/luke/produtos", icon: Package, permissionKey: "produtos" },
+    { label: "Empresa", href: "/luke/empresa", icon: Building2, permissionKey: "empresa" },
+    { label: "Configurações", href: "/luke/configuracoes", icon: Settings, permissionKey: "configuracoes" },
+    { label: "Logs", href: "/luke/logs", icon: History, permissionKey: "logs" },
   ];
 
   const visibleNavLinks = navLinks.filter((l) => hasPermission(l.permissionKey));
@@ -78,7 +88,7 @@ function LukeSidebarContent({ children }: { children: React.ReactNode }) {
         <div>
           {/* Header com Logomarca Dinâmica */}
           <div className="px-5 py-4 border-b border-brand-blue/30 flex items-center justify-start">
-            <Link href="/luke/produtos" className="block group w-full">
+            <Link href="/luke" className="block group w-full">
               {companyLogo ? (
                 <div className="w-full flex items-center justify-start">
                   <div className="h-16 sm:h-20 w-full max-w-[210px] flex items-center justify-start overflow-hidden">
@@ -127,6 +137,19 @@ function LukeSidebarContent({ children }: { children: React.ReactNode }) {
                 </Link>
               );
             })}
+
+            {/* Atalho: Modo Rua (se autorizado) */}
+            {hasPermission("rua") && (
+              <div className="pt-3 border-t border-brand-blue/20">
+                <Link
+                  href="/luke/rua"
+                  className="flex items-center space-x-3 px-4 py-2.5 bg-brand-gold/15 text-brand-gold hover:bg-brand-gold/25 border border-brand-gold/30 rounded-lg font-bold transition shadow-md text-sm"
+                >
+                  <span className="text-lg">📱</span>
+                  <span>Rua</span>
+                </Link>
+              </div>
+            )}
           </nav>
         </div>
 

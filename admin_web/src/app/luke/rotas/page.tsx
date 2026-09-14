@@ -122,7 +122,7 @@ export default function LukeRotasPage() {
   const { hideValues, togglePrivacy, formatValue } = usePrivacy();
 
   // Estados principais
-  const [scheduledEvents, setScheduledEvents] = useState<ScheduledRouteEvent[]>(INITIAL_SCHEDULED_EVENTS);
+  const [scheduledEvents, setScheduledEvents] = useState<ScheduledRouteEvent[]>([]);
   const [availableRoutes, setAvailableRoutes] = useState<RouteMaster[]>(MASTER_ROUTES_CATALOG);
   const [vendorsList, setVendorsList] = useState<{ name: string; defaultColor: string }[]>(DEFAULT_VENDORS);
   const [viewMode, setViewMode] = useState<"MONTH" | "WEEK" | "DAY" | "LIST">("MONTH");
@@ -188,6 +188,8 @@ export default function LukeRotasPage() {
           });
         });
         setScheduledEvents(loaded);
+      } else {
+        setScheduledEvents([]);
       }
     } catch (err: any) {
       console.warn("Firestore fetch offline/fallback:", err?.message);

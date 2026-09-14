@@ -406,8 +406,8 @@ const YEARS_LIST = ["2024", "2025", "2026", "2027"];
 export default function LukeFinanceiroPage() {
   const { hideValues, togglePrivacy, formatValue } = usePrivacy();
   const [activeTab, setActiveTab] = useState<"PAGAR" | "RECEBER" | "CAIXA" | "CATEGORIAS">("PAGAR");
-  const [payables, setPayables] = useState<PayableItem[]>(INITIAL_PAYABLES);
-  const [receivables, setReceivables] = useState<ReceivableItem[]>(INITIAL_RECEIVABLES);
+  const [payables, setPayables] = useState<PayableItem[]>([]);
+  const [receivables, setReceivables] = useState<ReceivableItem[]>([]);
   const [categories, setCategories] = useState(initialCategories);
   const [loadingFirestore, setLoadingFirestore] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
@@ -486,21 +486,17 @@ export default function LukeFinanceiroPage() {
           getDocs(collection(db, `tenants/${tenantId}/receivables`)),
         ]);
 
+        const pList: PayableItem[] = [];
         if (!paySnap.empty) {
-          const pList: PayableItem[] = [];
           paySnap.forEach((d) => pList.push({ id: d.id, ...d.data() } as PayableItem));
-          const testPayables = INITIAL_PAYABLES.filter((p) => p.id.startsWith("pay-test-"));
-          const mergedPay = [...testPayables.filter((tp) => !pList.some((p) => p.id === tp.id)), ...pList];
-          setPayables(mergedPay);
         }
+        setPayables(pList);
 
+        const rList: ReceivableItem[] = [];
         if (!recSnap.empty) {
-          const rList: ReceivableItem[] = [];
           recSnap.forEach((d) => rList.push({ id: d.id, ...d.data() } as ReceivableItem));
-          const testRec = INITIAL_RECEIVABLES.filter((r) => r.id.startsWith("pa-test-"));
-          const mergedRec = [...testRec.filter((tr) => !rList.some((r) => r.id === tr.id)), ...rList];
-          setReceivables(mergedRec);
         }
+        setReceivables(rList);
       } catch (err: any) {
         console.warn("Firestore finance fallback to initial:", err.message);
       } finally {

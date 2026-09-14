@@ -123,7 +123,7 @@ const INITIAL_TRANSACTIONS: TransactionItem[] = [
 export default function LukeTransacoesPage() {
   const { hideValues, togglePrivacy, formatValue } = usePrivacy();
 
-  const [transactions, setTransactions] = useState<TransactionItem[]>(INITIAL_TRANSACTIONS);
+  const [transactions, setTransactions] = useState<TransactionItem[]>([]);
   const [filterType, setFilterType] = useState("ALL");
   const [searchTerm, setSearchTerm] = useState("");
   const [loadingFirestore, setLoadingFirestore] = useState(false);
@@ -149,8 +149,9 @@ export default function LukeTransacoesPage() {
               status: d.status || "CONCILIADO",
             });
           });
-          const testItems = INITIAL_TRANSACTIONS.filter((t) => t.id.startsWith("tx-test-"));
-          setTransactions([...testItems, ...loaded]);
+          setTransactions(loaded);
+        } else {
+          setTransactions([]);
         }
       } catch (err: any) {
         console.warn("Firestore transactions fallback:", err?.message);

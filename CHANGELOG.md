@@ -6,14 +6,14 @@ Todas as melhorias, novidades e correções notáveis deste projeto serão docum
 
 ## [1.11.0] - 2026-09-14
 ### Changed
-- **Ambiente Exclusivo do Cadastro de Produtos (Interface Limpa Total)**:
-  - Barra lateral reformulada para exibir **exclusivamente o menu "Produtos"**, removendo todos os outros módulos (Visão, Clientes, Rotas, Cargas, Financeiro, Transações, Vendedores, Empresa, Configurações, Logs e Rua).
-  - Redirecionamento automático e instantâneo no login e na rota `/luke` diretamente para `/luke/produtos`.
-  - Logotipo na barra lateral agora navega diretamente para o Cadastro de Produtos.
-  - Substituição da página de visão antiga com métricas de demonstração por redirecionamento limpo para Produtos.
-- **Configuração de Cache no Firebase Hosting (`firebase.json`)**:
-  - Inclusão de cabeçalhos HTTP `Cache-Control: no-cache, no-store, must-revalidate` para rotas de aplicação, garantindo que o navegador nunca sirva versões antigas de código ou dados em cache.
-  - Tag visual da versão final 11 estampada no rodapé de login (`v1.11.0`).
+- **Restauração Completa dos Módulos e Barra Lateral com Base Operacional 100% Limpa**:
+  - Restauração de todos os 11 menus da barra lateral: **Visão, Clientes, Rotas, Cargas, Financeiro, Transações, Vendedores, Produtos, Empresa, Configurações, Logs** e atalho dedicado para o **Modo Rua**.
+  - Logotipo e rota padrão de login apontam normalmente para `/luke`.
+  - **Base de Operações 100% Zerada**: Telas de Visão (Dashboard), Transações, Financeiro (Contas a Pagar/Receber) e Rotas iniciam limpas (R$ 0,00 e sem dados falsos de demonstração), prontas para operação real.
+  - **Preservação Integral do Catálogo de Produtos**: Todos os 46 produtos oficiais (`tenants/tenant_luke_001/products`) com imagens, códigos de barra, valores e estoque permanecem 100% disponíveis e operacionais.
+- **Controle Rigoroso de Cache no Firebase Hosting (`firebase.json`)**:
+  - Implementação de cabeçalhos HTTP `Cache-Control: no-cache, no-store, must-revalidate` para rotas de aplicação, prevenindo que o navegador exiba versões anteriores ou em cache de dados.
+  - Versão oficial 11 estampada no rodapé de autenticação (`v1.11.0`).
 
 ## [1.10.0] - 2026-09-14
 ### Changed
