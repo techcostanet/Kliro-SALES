@@ -28,8 +28,10 @@ import {
   SlidersHorizontal,
   ChevronDown,
   Cloud,
+  Edit2,
+  Trash2,
 } from "lucide-react";
-import { collection, getDocs, doc, setDoc, deleteDoc } from "firebase/firestore";
+import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import initialCategories from "@/lib/financial_categories.json";
 import { usePrivacy } from "@/lib/privacyContext";
@@ -73,6 +75,15 @@ export interface ReceivableItem {
   status: "PENDING" | "RECEIVED" | "NEXT_MONTH" | "OVERDUE";
   notes?: string;
   auditTrail?: string[];
+}
+
+export interface FinancialCategory {
+  id: string;
+  name: string;
+  type: string;
+  status?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 const INITIAL_PAYABLES: PayableItem[] = [
@@ -408,7 +419,7 @@ export default function LukeFinanceiroPage() {
   const [activeTab, setActiveTab] = useState<"PAGAR" | "RECEBER" | "CAIXA" | "CATEGORIAS">("PAGAR");
   const [payables, setPayables] = useState<PayableItem[]>([]);
   const [receivables, setReceivables] = useState<ReceivableItem[]>([]);
-  const [categories, setCategories] = useState(initialCategories);
+  const [categories, setCategories] = useState<FinancialCategory[]>(initialCategories as FinancialCategory[]);
   const [loadingFirestore, setLoadingFirestore] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
@@ -419,13 +430,29 @@ export default function LukeFinanceiroPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
 
-  // Modais
+  // Modais de Contas a Pagar
   const [isPayableModalOpen, setIsPayableModalOpen] = useState(false);
+  const [editingPayable, setEditingPayable] = useState<PayableItem | null>(null);
   const [isSavingPayable, setIsSavingPayable] = useState(false);
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+
+  // Modais de Contas a Receber
+  const [isReceivableModalOpen, setIsReceivableModalOpen] = useState(false);
+  const [editingReceivable, setEditingReceivable] = useState<ReceivableItem | null>(null);
+  const [isSavingReceivable, setIsSavingReceivable] = useState(false);
   const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false);
   const [selectedReceivable, setSelectedReceivable] = useState<ReceivableItem | null>(null);
   const [receivePaymentMethod, setReceivePaymentMethod] = useState<"PIX" | "CASH" | "CARD" | "BOLETO">("PIX");
   const [receiveDate, setReceiveDate] = useState(new Date().toISOString().split("T")[0]);
+
+  // Modal de Categorias
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<FinancialCategory | null>(null);
+  const [isSavingCategory, setIsSavingCategory] = useState(false);
+  const [categoryForm, setCategoryForm] = useState<{ name: string; type: "EXPENSE" | "INCOME" }>({
+    name: "",
+    type: "EXPENSE",
+  });
 
   // Modal de Estorno de Segurança (Restrito a admin@luke.com)
   const [isReversalModalOpen, setIsReversalModalOpen] = useState(false);
@@ -463,6 +490,31 @@ export default function LukeFinanceiroPage() {
     recurrenceMonths: 12,
   });
 
+  // Form Conta a Receber
+  const [receivableForm, setReceivableForm] = useState<{
+    clientName: string;
+    buyerName: string;
+    routeId: string;
+    vendorName: string;
+    amount: number;
+    saleDate: string;
+    scheduledDate: string;
+    paymentMethod: "PIX" | "CASH" | "CARD" | "BOLETO" | "PA";
+    status: "PENDING" | "RECEIVED" | "NEXT_MONTH" | "OVERDUE";
+    notes: string;
+  }>({
+    clientName: "",
+    buyerName: "",
+    routeId: "R1",
+    vendorName: "LUKE Distribuidora",
+    amount: 0,
+    saleDate: new Date().toISOString().split("T")[0],
+    scheduledDate: new Date().toISOString().split("T")[0],
+    paymentMethod: "PA",
+    status: "PENDING",
+    notes: "",
+  });
+
   // Pesquisa Digital de Categorias
   const [categorySearch, setCategorySearch] = useState("");
 
@@ -481,9 +533,10 @@ export default function LukeFinanceiroPage() {
     const loadFinData = async () => {
       try {
         setLoadingFirestore(true);
-        const [paySnap, recSnap] = await Promise.all([
+        const [paySnap, recSnap, catSnap] = await Promise.all([
           getDocs(collection(db, `tenants/${tenantId}/payables`)),
           getDocs(collection(db, `tenants/${tenantId}/receivables`)),
+          getDocs(collection(db, `tenants/${tenantId}/categories`)),
         ]);
 
         const pList: PayableItem[] = [];
@@ -497,6 +550,24 @@ export default function LukeFinanceiroPage() {
           recSnap.forEach((d) => rList.push({ id: d.id, ...d.data() } as ReceivableItem));
         }
         setReceivables(rList);
+
+        if (!catSnap.empty) {
+          const cList: any[] = [];
+          catSnap.forEach((d) => cList.push({ id: d.id, ...d.data() }));
+          cList.sort((a, b) => a.name.localeCompare(b.name));
+          setCategories(cList);
+        } else {
+          // Salva categorias padrão se Firestore estiver vazio
+          try {
+            const batch = writeBatch(db);
+            for (const c of initialCategories) {
+              batch.set(doc(db, `tenants/${tenantId}/categories`, c.id), c);
+            }
+            await batch.commit();
+          } catch (seedCatErr) {
+            console.warn("Silent initial categories seed:", seedCatErr);
+          }
+        }
       } catch (err: any) {
         console.warn("Firestore finance fallback to initial:", err.message);
       } finally {
@@ -551,7 +622,63 @@ export default function LukeFinanceiroPage() {
     );
   }, [categories, categorySearch]);
 
-  // Lançar Conta a Pagar com Recorrência e Opção Já Paga
+  // Abertura do Modal de Despesas (Criar ou Editar)
+  const handleOpenPayableModal = (item?: PayableItem) => {
+    if (item) {
+      setEditingPayable(item);
+      setPayableForm({
+        description: item.description || "",
+        categoryId: item.categoryId || "CAT-001",
+        supplier: item.supplier || "",
+        amount: item.amount || 0,
+        dueDate: item.dueDate || todayStr,
+        competence: item.competence || `${selectedMonth}/${selectedYear}`,
+        notes: item.notes || "",
+        isAlreadyPaid: item.status === "PAID",
+        paymentDate: item.paymentDate || todayStr,
+        paymentMethod: item.paymentMethod || "PIX",
+        recurrence: Boolean(item.recurrence),
+        recurrenceMonths: item.recurrenceMonths || 12,
+      });
+    } else {
+      setEditingPayable(null);
+      setPayableForm({
+        description: "",
+        categoryId: "CAT-001",
+        supplier: "",
+        amount: 100,
+        dueDate: todayStr,
+        competence: `${selectedMonth}/${selectedYear}`,
+        notes: "",
+        isAlreadyPaid: false,
+        paymentDate: todayStr,
+        paymentMethod: "PIX",
+        recurrence: false,
+        recurrenceMonths: 12,
+      });
+    }
+    setIsCategoryDropdownOpen(false);
+    setIsPayableModalOpen(true);
+  };
+
+  // Excluir Conta a Pagar
+  const handleDeletePayable = async (item: PayableItem) => {
+    if (!confirm(`Deseja realmente excluir a despesa "${item.description}" (${formatCurrency(item.amount)})?`)) {
+      return;
+    }
+
+    try {
+      await deleteDoc(doc(db, `tenants/${tenantId}/payables`, item.id));
+      setPayables((prev) => prev.filter((p) => p.id !== item.id));
+      setSyncMessage(`✅ Despesa "${item.description}" excluída do banco com sucesso.`);
+      setTimeout(() => setSyncMessage(null), 4000);
+    } catch (err: any) {
+      console.error("Erro ao excluir despesa:", err);
+      setSyncMessage(`❌ Erro ao excluir despesa: ${err?.message}`);
+    }
+  };
+
+  // Salvar Conta a Pagar (Criação ou Edição)
   const handleSavePayable = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!payableForm.description?.trim()) return;
@@ -559,6 +686,44 @@ export default function LukeFinanceiroPage() {
     const catObj = categories.find((c) => c.id === payableForm.categoryId);
     const baseDueDate = payableForm.dueDate || todayStr;
     const isPaid = payableForm.isAlreadyPaid;
+
+    if (editingPayable) {
+      setIsSavingPayable(true);
+      try {
+        const updatedItem: PayableItem = {
+          ...editingPayable,
+          description: payableForm.description.trim(),
+          categoryId: payableForm.categoryId || "CAT-001",
+          categoryName: catObj?.name || editingPayable.categoryName || "Despesa Operacional",
+          supplier: payableForm.supplier?.trim() || "Diversos",
+          amount: Number(payableForm.amount || 0),
+          dueDate: baseDueDate,
+          competence: payableForm.competence || editingPayable.competence,
+          notes: payableForm.notes || "",
+          status: isPaid ? "PAID" : baseDueDate < todayStr ? "OVERDUE" : "PENDING",
+          paymentDate: isPaid ? payableForm.paymentDate : undefined,
+          paymentMethod: isPaid ? payableForm.paymentMethod : undefined,
+        };
+
+        await setDoc(doc(db, `tenants/${tenantId}/payables`, editingPayable.id), {
+          ...updatedItem,
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+
+        setPayables((prev) => prev.map((p) => p.id === editingPayable.id ? updatedItem : p));
+        setSyncMessage(`✅ Despesa "${updatedItem.description}" atualizada com sucesso!`);
+        setTimeout(() => setSyncMessage(null), 4000);
+
+        setIsPayableModalOpen(false);
+        setEditingPayable(null);
+      } catch (err: any) {
+        console.error("Erro ao atualizar despesa:", err);
+        setSyncMessage(`❌ Erro ao atualizar despesa: ${err?.message || "Erro de conexão"}`);
+      } finally {
+        setIsSavingPayable(false);
+      }
+      return;
+    }
 
     const itemsToCreate: PayableItem[] = [];
 
@@ -625,7 +790,6 @@ export default function LukeFinanceiroPage() {
       setSyncMessage(`✅ ${itemsToCreate.length} lançamento(s) de despesa gravado(s) na nuvem Firestore!`);
       setTimeout(() => setSyncMessage(null), 4000);
 
-      // Fecha o modal apenas se gravado com sucesso
       setIsPayableModalOpen(false);
       setPayableForm({
         description: "",
@@ -647,6 +811,189 @@ export default function LukeFinanceiroPage() {
       setSyncMessage(`❌ Erro ao salvar despesa na nuvem: ${err?.message || "Erro de conexão"}`);
     } finally {
       setIsSavingPayable(false);
+    }
+  };
+
+  // Handlers de Contas a Receber (Novo, Editar, Excluir)
+  const handleOpenReceivableModal = (item?: ReceivableItem) => {
+    if (item) {
+      setEditingReceivable(item);
+      setReceivableForm({
+        clientName: item.clientName || "",
+        buyerName: item.buyerName || "",
+        routeId: item.routeId || "R1",
+        vendorName: item.vendorName || "LUKE Distribuidora",
+        amount: item.amount || 0,
+        saleDate: item.saleDate || todayStr,
+        scheduledDate: item.scheduledDate || todayStr,
+        paymentMethod: (item.paymentMethod as any) || "PA",
+        status: item.status || "PENDING",
+        notes: item.notes || "",
+      });
+    } else {
+      setEditingReceivable(null);
+      setReceivableForm({
+        clientName: "",
+        buyerName: "",
+        routeId: "R1",
+        vendorName: "LUKE Distribuidora",
+        amount: 0,
+        saleDate: todayStr,
+        scheduledDate: todayStr,
+        paymentMethod: "PA",
+        status: "PENDING",
+        notes: "",
+      });
+    }
+    setIsReceivableModalOpen(true);
+  };
+
+  const handleSaveReceivable = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!receivableForm.clientName?.trim()) return;
+
+    setIsSavingReceivable(true);
+    try {
+      if (editingReceivable) {
+        const updatedItem: ReceivableItem = {
+          ...editingReceivable,
+          clientName: receivableForm.clientName.trim(),
+          buyerName: receivableForm.buyerName.trim(),
+          routeId: receivableForm.routeId || "R1",
+          vendorName: receivableForm.vendorName.trim() || "LUKE Distribuidora",
+          amount: Number(receivableForm.amount || 0),
+          saleDate: receivableForm.saleDate || todayStr,
+          scheduledDate: receivableForm.scheduledDate || todayStr,
+          paymentMethod: receivableForm.paymentMethod,
+          status: receivableForm.status,
+          notes: receivableForm.notes || "",
+        };
+
+        await setDoc(doc(db, `tenants/${tenantId}/receivables`, editingReceivable.id), {
+          ...updatedItem,
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+
+        setReceivables((prev) => prev.map((r) => r.id === editingReceivable.id ? updatedItem : r));
+        setSyncMessage(`✅ Título a receber de "${updatedItem.clientName}" atualizado com sucesso!`);
+      } else {
+        const newItem: ReceivableItem = {
+          id: `rec-${Date.now()}`,
+          clientName: receivableForm.clientName.trim(),
+          buyerName: receivableForm.buyerName.trim(),
+          routeId: receivableForm.routeId || "R1",
+          vendorName: receivableForm.vendorName.trim() || "LUKE Distribuidora",
+          amount: Number(receivableForm.amount || 0),
+          saleDate: receivableForm.saleDate || todayStr,
+          scheduledDate: receivableForm.scheduledDate || todayStr,
+          paymentMethod: receivableForm.paymentMethod,
+          status: receivableForm.status,
+          notes: receivableForm.notes || "",
+        };
+
+        await setDoc(doc(db, `tenants/${tenantId}/receivables`, newItem.id), {
+          ...newItem,
+          createdAt: new Date().toISOString(),
+        });
+
+        setReceivables((prev) => [newItem, ...prev]);
+        setSyncMessage(`✅ Título a receber de "${newItem.clientName}" lançado na nuvem!`);
+      }
+      setTimeout(() => setSyncMessage(null), 4000);
+      setIsReceivableModalOpen(false);
+      setEditingReceivable(null);
+    } catch (err: any) {
+      console.error("Erro ao salvar conta a receber:", err);
+      setSyncMessage(`❌ Erro ao salvar título: ${err?.message}`);
+    } finally {
+      setIsSavingReceivable(false);
+    }
+  };
+
+  const handleDeleteReceivable = async (item: ReceivableItem) => {
+    if (!confirm(`Deseja realmente excluir o título a receber de "${item.clientName}" (${formatCurrency(item.amount)})?`)) {
+      return;
+    }
+
+    try {
+      await deleteDoc(doc(db, `tenants/${tenantId}/receivables`, item.id));
+      setReceivables((prev) => prev.filter((p) => p.id !== item.id));
+      setSyncMessage(`✅ Título a receber de "${item.clientName}" excluído do banco.`);
+      setTimeout(() => setSyncMessage(null), 4000);
+    } catch (err: any) {
+      console.error("Erro ao excluir conta a receber:", err);
+      setSyncMessage(`❌ Erro ao excluir título: ${err?.message}`);
+    }
+  };
+
+  // Handlers de Categorias (Novo, Editar, Excluir)
+  const handleOpenCategoryModal = (cat?: any) => {
+    if (cat) {
+      setEditingCategory(cat);
+      setCategoryForm({ name: cat.name || "", type: cat.type || "EXPENSE" });
+    } else {
+      setEditingCategory(null);
+      setCategoryForm({ name: "", type: "EXPENSE" });
+    }
+    setIsCategoryModalOpen(true);
+  };
+
+  const handleSaveCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!categoryForm.name?.trim()) return;
+
+    setIsSavingCategory(true);
+    try {
+      if (editingCategory) {
+        const updatedCat: FinancialCategory = {
+          ...editingCategory,
+          name: categoryForm.name.trim(),
+          type: categoryForm.type,
+          updatedAt: new Date().toISOString(),
+        };
+
+        await setDoc(doc(db, `tenants/${tenantId}/categories`, editingCategory.id), updatedCat, { merge: true });
+        setCategories((prev) => prev.map((c) => c.id === editingCategory.id ? updatedCat : c));
+        setSyncMessage(`✅ Categoria "${updatedCat.name}" atualizada com sucesso!`);
+      } else {
+        const nextNum = categories.length + 1;
+        const newCatId = `CAT-${String(nextNum).padStart(3, "0")}`;
+        const newCat: FinancialCategory = {
+          id: newCatId,
+          name: categoryForm.name.trim(),
+          type: categoryForm.type,
+          status: "ACTIVE",
+          createdAt: new Date().toISOString(),
+        };
+
+        await setDoc(doc(db, `tenants/${tenantId}/categories`, newCatId), newCat);
+        setCategories((prev) => [...prev, newCat]);
+        setSyncMessage(`✅ Categoria "${newCat.name}" criada com sucesso!`);
+      }
+      setTimeout(() => setSyncMessage(null), 4000);
+      setIsCategoryModalOpen(false);
+      setEditingCategory(null);
+    } catch (err: any) {
+      console.error("Erro ao salvar categoria:", err);
+      setSyncMessage(`❌ Erro ao salvar categoria: ${err?.message}`);
+    } finally {
+      setIsSavingCategory(false);
+    }
+  };
+
+  const handleDeleteCategory = async (cat: any) => {
+    if (!confirm(`Deseja realmente excluir a categoria "${cat.name}"?`)) {
+      return;
+    }
+
+    try {
+      await deleteDoc(doc(db, `tenants/${tenantId}/categories`, cat.id));
+      setCategories((prev) => prev.filter((c) => c.id !== cat.id));
+      setSyncMessage(`✅ Categoria "${cat.name}" excluída com sucesso.`);
+      setTimeout(() => setSyncMessage(null), 4000);
+    } catch (err: any) {
+      console.error("Erro ao excluir categoria:", err);
+      setSyncMessage(`❌ Erro ao excluir categoria: ${err?.message}`);
     }
   };
 
@@ -937,11 +1284,31 @@ export default function LukeFinanceiroPage() {
 
           {activeTab === "PAGAR" && (
             <button
-              onClick={() => setIsPayableModalOpen(true)}
-              className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-brand-gold text-brand-black px-4 py-2.5 rounded-xl font-extrabold hover:bg-yellow-500 transition shadow-lg text-xs shrink-0"
+              onClick={() => handleOpenPayableModal()}
+              className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-brand-gold text-brand-black px-4 py-2.5 rounded-xl font-extrabold hover:bg-yellow-500 transition shadow-lg text-xs shrink-0 cursor-pointer"
             >
               <Plus size={16} />
               <span>Nova Despesa</span>
+            </button>
+          )}
+
+          {activeTab === "RECEBER" && (
+            <button
+              onClick={() => handleOpenReceivableModal()}
+              className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-brand-gold text-brand-black px-4 py-2.5 rounded-xl font-extrabold hover:bg-yellow-500 transition shadow-lg text-xs shrink-0 cursor-pointer"
+            >
+              <Plus size={16} />
+              <span>Novo Título / Receber</span>
+            </button>
+          )}
+
+          {activeTab === "CATEGORIAS" && (
+            <button
+              onClick={() => handleOpenCategoryModal()}
+              className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-brand-gold text-brand-black px-4 py-2.5 rounded-xl font-extrabold hover:bg-yellow-500 transition shadow-lg text-xs shrink-0 cursor-pointer"
+            >
+              <Plus size={16} />
+              <span>Nova Categoria</span>
             </button>
           )}
         </div>
@@ -1225,30 +1592,47 @@ export default function LukeFinanceiroPage() {
                         </span>
                       </td>
 
-                      <td className="p-4 text-right space-x-2 whitespace-nowrap">
+                      <td className="p-4 text-right space-x-1.5 whitespace-nowrap">
                         {item.status !== "PAID" ? (
                           <button
                             onClick={() => handlePayPayable(item)}
-                            className="px-3 py-1.5 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-xs font-bold hover:bg-green-500/30 transition inline-flex items-center space-x-1"
+                            className="px-2.5 py-1.5 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-xs font-bold hover:bg-green-500/30 transition inline-flex items-center space-x-1 cursor-pointer"
+                            title="Dar baixa / Liquidar"
                           >
-                            <Check size={14} />
+                            <Check size={13} />
                             <span>Baixar</span>
                           </button>
                         ) : (
-                          <div className="inline-flex items-center space-x-2">
+                          <div className="inline-flex items-center space-x-1">
                             <span className="text-xs text-brand-offwhite/40 inline-flex items-center space-x-1">
-                              <CheckCircle2 size={14} className="text-green-400" />
+                              <CheckCircle2 size={13} className="text-green-400" />
                               <span>Liquidado</span>
                             </span>
                             <button
                               onClick={() => handleOpenReversalModal("PAYABLE", item)}
                               title="Estornar Baixa (admin@luke.com)"
-                              className="p-1 text-brand-offwhite/40 hover:text-amber-400 rounded transition hover:bg-brand-blue/20"
+                              className="p-1.5 text-brand-offwhite/40 hover:text-amber-400 rounded transition hover:bg-brand-blue/20 cursor-pointer"
                             >
-                              <RotateCcw size={14} />
+                              <RotateCcw size={13} />
                             </button>
                           </div>
                         )}
+
+                        <button
+                          onClick={() => handleOpenPayableModal(item)}
+                          title="Editar Despesa"
+                          className="p-1.5 text-brand-offwhite/60 hover:text-brand-gold rounded-lg hover:bg-brand-blue/20 transition cursor-pointer inline-flex items-center"
+                        >
+                          <Edit2 size={14} />
+                        </button>
+
+                        <button
+                          onClick={() => handleDeletePayable(item)}
+                          title="Excluir Despesa"
+                          className="p-1.5 text-brand-offwhite/60 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition cursor-pointer inline-flex items-center"
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       </td>
                     </tr>
                   );
@@ -1445,30 +1829,47 @@ export default function LukeFinanceiroPage() {
                           </span>
                         </td>
 
-                        <td className="p-4 text-right space-x-2 whitespace-nowrap">
+                        <td className="p-4 text-right space-x-1.5 whitespace-nowrap">
                           {item.status !== "RECEIVED" ? (
                             <button
                               onClick={() => handleOpenReceiveModal(item)}
-                              className="px-3 py-1.5 bg-brand-gold text-brand-black rounded-lg text-xs font-extrabold hover:bg-yellow-500 transition shadow-md inline-flex items-center space-x-1"
+                              className="px-2.5 py-1.5 bg-brand-gold text-brand-black rounded-lg text-xs font-extrabold hover:bg-yellow-500 transition shadow-md inline-flex items-center space-x-1 cursor-pointer"
+                              title="Baixar P.A. no Caixa"
                             >
-                              <DollarSign size={14} />
+                              <DollarSign size={13} />
                               <span>Baixar P.A.</span>
                             </button>
                           ) : (
-                            <div className="inline-flex items-center space-x-2">
+                            <div className="inline-flex items-center space-x-1">
                               <span className="text-xs text-brand-offwhite/40 inline-flex items-center space-x-1">
-                                <CheckCircle2 size={14} className="text-green-400" />
+                                <CheckCircle2 size={13} className="text-green-400" />
                                 <span>Caixa</span>
                               </span>
                               <button
                                 onClick={() => handleOpenReversalModal("RECEIVABLE", item)}
                                 title="Estornar Baixa (admin@luke.com)"
-                                className="p-1 text-brand-offwhite/40 hover:text-amber-400 rounded transition hover:bg-brand-blue/20"
+                                className="p-1.5 text-brand-offwhite/40 hover:text-amber-400 rounded transition hover:bg-brand-blue/20 cursor-pointer"
                               >
-                                <RotateCcw size={14} />
+                                <RotateCcw size={13} />
                               </button>
                             </div>
                           )}
+
+                          <button
+                            onClick={() => handleOpenReceivableModal(item)}
+                            title="Editar Título"
+                            className="p-1.5 text-brand-offwhite/60 hover:text-brand-gold rounded-lg hover:bg-brand-blue/20 transition cursor-pointer inline-flex items-center"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+
+                          <button
+                            onClick={() => handleDeleteReceivable(item)}
+                            title="Excluir Título"
+                            className="p-1.5 text-brand-offwhite/60 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition cursor-pointer inline-flex items-center"
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </td>
                       </tr>
                     );
@@ -1560,30 +1961,55 @@ export default function LukeFinanceiroPage() {
                 Plano de contas padronizado para despesas operacionais e receitas da distribuidora.
               </p>
             </div>
-            <span className="px-3 py-1 bg-brand-gold/20 text-brand-gold text-xs font-bold rounded-lg border border-brand-gold/30">
-              {categories.length} categorias cadastradas
-            </span>
+            <div className="flex items-center space-x-2">
+              <span className="px-3 py-1 bg-brand-gold/20 text-brand-gold text-xs font-bold rounded-lg border border-brand-gold/30">
+                {categories.length} categorias
+              </span>
+              <button
+                onClick={() => handleOpenCategoryModal()}
+                className="flex items-center space-x-1.5 bg-brand-gold text-brand-black px-3.5 py-1.5 rounded-lg text-xs font-bold hover:bg-yellow-500 transition shadow cursor-pointer"
+              >
+                <Plus size={14} />
+                <span>Nova Categoria</span>
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
             {categories.map((c) => (
               <div
                 key={c.id}
-                className="p-3 bg-brand-black/50 border border-brand-blue/30 rounded-xl flex items-center justify-between"
+                className="p-3 bg-brand-black/50 border border-brand-blue/30 hover:border-brand-gold/40 rounded-xl flex items-center justify-between transition group"
               >
-                <div>
-                  <p className="text-sm font-semibold text-brand-offwhite">{c.name}</p>
+                <div className="truncate mr-2">
+                  <p className="text-sm font-semibold text-brand-offwhite truncate">{c.name}</p>
                   <span className="text-[10px] text-brand-offwhite/40 font-mono">{c.id}</span>
                 </div>
-                <span
-                  className={`text-[10px] px-2 py-0.5 rounded font-bold ${
-                    c.type === "INCOME"
-                      ? "bg-green-500/20 text-green-400 border border-green-500/30"
-                      : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                  }`}
-                >
-                  {c.type === "INCOME" ? "Receita" : "Despesa"}
-                </span>
+                <div className="flex items-center space-x-1.5 shrink-0">
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                      c.type === "INCOME"
+                        ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                        : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                    }`}
+                  >
+                    {c.type === "INCOME" ? "Receita" : "Despesa"}
+                  </span>
+                  <button
+                    onClick={() => handleOpenCategoryModal(c)}
+                    title="Editar Categoria"
+                    className="p-1 text-brand-offwhite/40 hover:text-brand-gold rounded transition hover:bg-brand-blue/20 cursor-pointer"
+                  >
+                    <Edit2 size={13} />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteCategory(c)}
+                    title="Excluir Categoria"
+                    className="p-1 text-brand-offwhite/40 hover:text-red-400 rounded transition hover:bg-red-500/10 cursor-pointer"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -1606,9 +2032,13 @@ export default function LukeFinanceiroPage() {
                 <ArrowUpRight size={20} />
               </div>
               <div>
-                <h3 className="text-xl font-bold text-brand-offwhite">Lançar Despesa</h3>
+                <h3 className="text-xl font-bold text-brand-offwhite">
+                  {editingPayable ? "Editar Despesa" : "Lançar Despesa"}
+                </h3>
                 <p className="text-xs text-brand-offwhite/60">
-                  Cadastre contas a pagar com busca de categoria, recorrência e opção de baixa imediata.
+                  {editingPayable
+                    ? "Altere os dados da despesa, vencimento, fornecedor ou categoria."
+                    : "Cadastre contas a pagar com lista rápida de categoria, recorrência e opção de baixa imediata."}
                 </p>
               </div>
             </div>
@@ -1628,33 +2058,110 @@ export default function LukeFinanceiroPage() {
                 />
               </div>
 
-              {/* BUSCA DIGITAL DE CATEGORIAS (ITEM 8) */}
-              <div className="p-3 bg-brand-black/50 rounded-xl border border-brand-blue/30 space-y-2">
-                <label className="block text-xs font-bold text-brand-gold uppercase tracking-wider flex items-center space-x-1.5">
-                  <Tag size={13} />
+              {/* SELETOR DE CATEGORIA CLICÁVEL COM LISTA (SAFARI & CHROME FRIENDLY) */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-brand-offwhite/70 flex items-center space-x-1.5">
+                  <Tag size={13} className="text-brand-gold" />
                   <span>Categoria da Despesa</span>
                 </label>
+
                 <div className="relative">
-                  <Search size={14} className="absolute left-2.5 top-2.5 text-brand-offwhite/40" />
-                  <input
-                    type="text"
-                    value={categorySearch}
-                    onChange={(e) => setCategorySearch(e.target.value)}
-                    placeholder="Pesquisar categoria digitalmente..."
-                    className="w-full pl-8 pr-3 py-1.5 bg-brand-graphite border border-brand-blue/40 rounded-lg text-xs text-brand-offwhite focus:outline-none focus:border-brand-gold"
-                  />
+                  {/* Botão de Clique para Abrir Lista */}
+                  <button
+                    type="button"
+                    onClick={() => setIsCategoryDropdownOpen((prev) => !prev)}
+                    className="w-full px-3 py-2.5 bg-brand-black border border-brand-blue/40 hover:border-brand-gold rounded-xl text-left flex items-center justify-between transition group cursor-pointer focus:outline-none focus:border-brand-gold"
+                  >
+                    <div className="flex items-center space-x-2 truncate">
+                      <span className="text-sm text-brand-offwhite font-medium truncate">
+                        {categories.find((c) => c.id === payableForm.categoryId)?.name || "Selecione uma Categoria..."}
+                      </span>
+                      {categories.find((c) => c.id === payableForm.categoryId) && (
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded font-bold shrink-0 ${
+                            categories.find((c) => c.id === payableForm.categoryId)?.type === "INCOME"
+                              ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                              : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                          }`}
+                        >
+                          {categories.find((c) => c.id === payableForm.categoryId)?.type === "INCOME" ? "Receita" : "Despesa"}
+                        </span>
+                      )}
+                    </div>
+                    <ChevronDown
+                      size={16}
+                      className={`text-brand-offwhite/50 group-hover:text-brand-gold transition-transform duration-200 shrink-0 ${
+                        isCategoryDropdownOpen ? "rotate-180 text-brand-gold" : ""
+                      }`}
+                    />
+                  </button>
+
+                  {/* Backdrop invisível para fechar ao clicar fora */}
+                  {isCategoryDropdownOpen && (
+                    <div
+                      className="fixed inset-0 z-40 cursor-default"
+                      onClick={() => setIsCategoryDropdownOpen(false)}
+                    />
+                  )}
+
+                  {/* Menu Dropdown de Opções */}
+                  {isCategoryDropdownOpen && (
+                    <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-brand-graphite border border-brand-gold/40 rounded-xl shadow-2xl p-2.5 space-y-2">
+                      <div className="relative">
+                        <Search size={13} className="absolute left-2.5 top-2.5 text-brand-offwhite/40" />
+                        <input
+                          type="text"
+                          value={categorySearch}
+                          onChange={(e) => setCategorySearch(e.target.value)}
+                          placeholder="Buscar categoria..."
+                          className="w-full pl-8 pr-3 py-1.5 bg-brand-black/90 border border-brand-blue/40 rounded-lg text-xs text-brand-offwhite focus:outline-none focus:border-brand-gold"
+                          autoFocus
+                        />
+                      </div>
+
+                      <div className="max-h-52 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                        {filteredCategories.length === 0 ? (
+                          <div className="p-3 text-center text-xs text-brand-offwhite/50">
+                            Nenhuma categoria encontrada
+                          </div>
+                        ) : (
+                          filteredCategories.map((c) => {
+                            const isSelected = c.id === payableForm.categoryId;
+                            return (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => {
+                                  setPayableForm({ ...payableForm, categoryId: c.id });
+                                  setIsCategoryDropdownOpen(false);
+                                  setCategorySearch("");
+                                }}
+                                className={`w-full px-3 py-2 rounded-lg text-left flex items-center justify-between transition cursor-pointer text-xs ${
+                                  isSelected
+                                    ? "bg-brand-gold text-brand-black font-bold"
+                                    : "text-brand-offwhite hover:bg-brand-black hover:text-brand-gold"
+                                }`}
+                              >
+                                <span className="truncate">{c.name}</span>
+                                <span
+                                  className={`text-[9px] px-1.5 py-0.5 rounded font-bold shrink-0 ml-2 ${
+                                    isSelected
+                                      ? "bg-brand-black/20 text-brand-black"
+                                      : c.type === "INCOME"
+                                      ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                                      : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                                  }`}
+                                >
+                                  {c.type === "INCOME" ? "Receita" : "Despesa"}
+                                </span>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <select
-                  value={payableForm.categoryId}
-                  onChange={(e) => setPayableForm({ ...payableForm, categoryId: e.target.value })}
-                  className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-xs text-brand-offwhite focus:outline-none focus:border-brand-gold"
-                >
-                  {filteredCategories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({c.type === "INCOME" ? "Receita" : "Despesa"})
-                    </option>
-                  ))}
-                </select>
               </div>
 
               <div>
@@ -1825,7 +2332,7 @@ export default function LukeFinanceiroPage() {
                   ) : (
                     <>
                       <Cloud size={15} className="text-brand-black" />
-                      <span>Salvar Despesa</span>
+                      <span>{editingPayable ? "Salvar Alterações" : "Salvar Despesa"}</span>
                     </>
                   )}
                 </button>
@@ -2043,6 +2550,313 @@ export default function LukeFinanceiroPage() {
                 >
                   <RotateCcw size={14} />
                   <span>Confirmar Estorno</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Lançar / Editar Título a Receber */}
+      {isReceivableModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-brand-black/80 backdrop-blur-sm">
+          <div className="bg-brand-graphite w-full max-w-lg rounded-2xl border border-brand-blue/40 shadow-2xl p-6 relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setIsReceivableModalOpen(false)}
+              className="absolute top-4 right-4 text-brand-offwhite/50 hover:text-brand-offwhite p-1 rounded-lg hover:bg-brand-blue/20 transition cursor-pointer"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="flex items-center space-x-3 mb-6">
+              <div className="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center border border-purple-500/30">
+                <DollarSign size={20} />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-brand-offwhite">
+                  {editingReceivable ? "Editar Título a Receber" : "Lançar Título a Receber"}
+                </h3>
+                <p className="text-xs text-brand-offwhite/60">
+                  {editingReceivable
+                    ? "Altere os dados do título, cliente, vencimento ou valor a receber."
+                    : "Cadastre contas e duplicatas a receber geradas por vendas a prazo ou P.A."}
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveReceivable} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
+                  Cliente / Razão Social *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={receivableForm.clientName}
+                  onChange={(e) => setReceivableForm({ ...receivableForm, clientName: e.target.value })}
+                  className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold"
+                  placeholder="Ex: Barbearia Dom Lucas"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
+                    Comprador / Contato
+                  </label>
+                  <input
+                    type="text"
+                    value={receivableForm.buyerName}
+                    onChange={(e) => setReceivableForm({ ...receivableForm, buyerName: e.target.value })}
+                    className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold"
+                    placeholder="Ex: Carlos (Proprietário)"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
+                    Rota
+                  </label>
+                  <input
+                    type="text"
+                    value={receivableForm.routeId}
+                    onChange={(e) => setReceivableForm({ ...receivableForm, routeId: e.target.value })}
+                    className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-gold font-bold focus:outline-none focus:border-brand-gold"
+                    placeholder="Ex: R1, R2, F1..."
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
+                    Vendedor Responsável
+                  </label>
+                  <input
+                    type="text"
+                    value={receivableForm.vendorName}
+                    onChange={(e) => setReceivableForm({ ...receivableForm, vendorName: e.target.value })}
+                    className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold"
+                    placeholder="Ex: Alisson (Vendedor)"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
+                    Valor a Receber (R$) *
+                  </label>
+                  <CurrencyInput
+                    required
+                    value={receivableForm.amount ?? ""}
+                    onChange={(val) => setReceivableForm({ ...receivableForm, amount: val })}
+                    className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-purple-400 font-bold focus:outline-none focus:border-brand-gold"
+                    placeholder="R$ 0,00"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
+                    Data da Venda
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={receivableForm.saleDate}
+                    onChange={(e) => setReceivableForm({ ...receivableForm, saleDate: e.target.value })}
+                    className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
+                    Data Prevista / Vencimento
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={receivableForm.scheduledDate}
+                    onChange={(e) => setReceivableForm({ ...receivableForm, scheduledDate: e.target.value })}
+                    className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
+                    Forma de Pagamento
+                  </label>
+                  <select
+                    value={receivableForm.paymentMethod}
+                    onChange={(e) => setReceivableForm({ ...receivableForm, paymentMethod: e.target.value as any })}
+                    className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold"
+                  >
+                    <option value="PA">P.A. (Prazo)</option>
+                    <option value="PIX">PIX</option>
+                    <option value="BOLETO">Boleto Bancário</option>
+                    <option value="CARD">Cartão</option>
+                    <option value="CASH">Dinheiro</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
+                    Status do Título
+                  </label>
+                  <select
+                    value={receivableForm.status}
+                    onChange={(e) => setReceivableForm({ ...receivableForm, status: e.target.value as any })}
+                    className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold"
+                  >
+                    <option value="PENDING">Pendente</option>
+                    <option value="RECEIVED">Recebido / Liquidado</option>
+                    <option value="NEXT_MONTH">Próximo Mês</option>
+                    <option value="OVERDUE">Atrasado</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
+                  Observações / Detalhes
+                </label>
+                <textarea
+                  rows={2}
+                  value={receivableForm.notes}
+                  onChange={(e) => setReceivableForm({ ...receivableForm, notes: e.target.value })}
+                  className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold"
+                  placeholder="Número de pedido, detalhes de entrega, etc..."
+                />
+              </div>
+
+              <div className="flex items-center justify-end space-x-3 pt-4 border-t border-brand-blue/30">
+                <button
+                  type="button"
+                  onClick={() => setIsReceivableModalOpen(false)}
+                  className="px-4 py-2 text-sm text-brand-offwhite/70 hover:text-brand-offwhite transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingReceivable}
+                  className="px-6 py-2 bg-brand-gold text-brand-black rounded-lg font-bold hover:bg-yellow-500 transition shadow-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 cursor-pointer"
+                >
+                  {isSavingReceivable ? (
+                    <>
+                      <RefreshCw size={15} className="animate-spin text-brand-black" />
+                      <span>Gravando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Cloud size={15} className="text-brand-black" />
+                      <span>{editingReceivable ? "Salvar Alterações" : "Salvar Título"}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Criar / Editar Categoria Financeira */}
+      {isCategoryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-brand-black/80 backdrop-blur-sm">
+          <div className="bg-brand-graphite w-full max-w-md rounded-2xl border border-brand-gold/40 shadow-2xl p-6 relative">
+            <button
+              onClick={() => setIsCategoryModalOpen(false)}
+              className="absolute top-4 right-4 text-brand-offwhite/50 hover:text-brand-offwhite p-1 rounded-lg hover:bg-brand-blue/20 transition cursor-pointer"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="flex items-center space-x-3 mb-5">
+              <div className="w-10 h-10 rounded-xl bg-brand-gold/20 text-brand-gold flex items-center justify-center border border-brand-gold/30">
+                <Tag size={20} />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-brand-offwhite">
+                  {editingCategory ? "Editar Categoria" : "Nova Categoria"}
+                </h3>
+                <p className="text-xs text-brand-offwhite/60">
+                  {editingCategory ? "Altere o nome ou tipo da categoria." : "Cadastre uma nova categoria para o plano de contas."}
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveCategory} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
+                  Nome da Categoria *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={categoryForm.name}
+                  onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
+                  className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold"
+                  placeholder="Ex: Combustível & Frotas"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
+                  Tipo da Categoria
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setCategoryForm({ ...categoryForm, type: "EXPENSE" })}
+                    className={`py-2 px-3 rounded-lg text-xs font-bold border transition text-center cursor-pointer ${
+                      categoryForm.type === "EXPENSE"
+                        ? "bg-amber-500/20 text-amber-400 border-amber-500/40"
+                        : "bg-brand-black text-brand-offwhite/60 border-brand-blue/30"
+                    }`}
+                  >
+                    Despesa (Saída)
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCategoryForm({ ...categoryForm, type: "INCOME" })}
+                    className={`py-2 px-3 rounded-lg text-xs font-bold border transition text-center cursor-pointer ${
+                      categoryForm.type === "INCOME"
+                        ? "bg-green-500/20 text-green-400 border-green-500/40"
+                        : "bg-brand-black text-brand-offwhite/60 border-brand-blue/30"
+                    }`}
+                  >
+                    Receita (Entrada)
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end space-x-3 pt-4 border-t border-brand-blue/30">
+                <button
+                  type="button"
+                  onClick={() => setIsCategoryModalOpen(false)}
+                  className="px-4 py-2 text-sm text-brand-offwhite/70 hover:text-brand-offwhite transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingCategory}
+                  className="px-5 py-2 bg-brand-gold text-brand-black font-bold rounded-lg hover:bg-yellow-500 transition shadow-lg text-xs flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingCategory ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin text-brand-black" />
+                      <span>Gravando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Cloud size={14} className="text-brand-black" />
+                      <span>{editingCategory ? "Salvar Alterações" : "Salvar Categoria"}</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

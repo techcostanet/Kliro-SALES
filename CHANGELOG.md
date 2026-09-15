@@ -4,6 +4,23 @@ Todas as melhorias, novidades e correções notáveis deste projeto serão docum
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-09-15
+### Added
+- **Upload de Imagem de Produtos Direto do Computador (`/luke/produtos`)**:
+  - Eliminação definitiva do campo de digitação de URL externa para foto do produto.
+  - Adição de botão e área de clique para selecionar arquivos de imagem locais do PC (`.png`, `.jpg`, `.webp`).
+  - Otimizador de imagem client-side em HTML5 Canvas que redimensiona para 600px e comprime para formato leve (< 50KB em Base64), garantindo salvamento ágil no Firestore sem exceder cotas.
+  - Visualização prévia imediata da foto selecionada e botões para trocar ou remover imagem.
+- **Edição e Exclusão Completa no Módulo Financeiro (`/luke/financeiro`)**:
+  - **Contas a Pagar (Despesas)**: Botão de edição para atualizar descrição, fornecedor, valor, vencimento, competência e categoria; botão de exclusão direta do documento no Firestore (`tenants/{tenantId}/payables`) com confirmação de segurança.
+  - **Contas a Receber (P.A. e Títulos)**: Botão de ação "+ Novo Título / Receber" no cabeçalho; modal completo para cadastrar ou editar cliente, comprador, rota, vendedor, valor com `CurrencyInput`, datas e status; botão de exclusão direta no Firestore (`tenants/{tenantId}/receivables`).
+  - **Categorias Financeiras**: Persistência ativa no Firestore (`tenants/{tenantId}/categories`); botão "+ Nova Categoria" com definição de tipo (Despesa ou Receita); botões de editar e excluir categorias individuais nos cards, com atualização em tempo real no seletor de despesas.
+
+### Fixed
+- **Seletor de Categoria de Despesas Cross-Browser (Safari & Chrome)**:
+  - Resolução da falha de renderização no Safari (macOS e iOS WebKit), onde o elemento `<select>` nativo com fundo escuro e opções filtradas dinamicamente apresentava opções invisíveis ou não abria.
+  - Implementação de Dropdown Customizado Clicável em Dark Gold com badges visuais (Despesa / Receita), busca integrada e fechamento automático ao clicar fora.
+
 ## [1.11.1] - 2026-09-14
 ### Changed
 - **Eliminação Total de Dados Mock nos Painéis e Cards da Visão Geral (`/luke`)**:

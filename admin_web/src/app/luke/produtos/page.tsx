@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Plus,
   Search,
@@ -22,6 +22,7 @@ import {
   Eye,
   EyeOff,
   Cloud,
+  Upload,
 } from "lucide-react";
 import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -77,6 +78,52 @@ const BRANDS = [
   "Outra Marca",
 ];
 
+// Helper para comprimir e converter imagem local para Base64 leve (<50KB)
+const compressImageFile = (file: File, maxWidth = 600, maxHeight = 600, quality = 0.85): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(event.target?.result as string);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        try {
+          const dataUrl = canvas.toDataURL("image/webp", quality);
+          resolve(dataUrl);
+        } catch {
+          resolve(canvas.toDataURL("image/jpeg", quality));
+        }
+      };
+      img.onerror = (error) => reject(error);
+    };
+    reader.onerror = (error) => reject(error);
+  });
+};
+
 export default function LukeProdutosPage() {
   const { hideValues, togglePrivacy, formatValue } = usePrivacy();
   const [products, setProducts] = useState<ProductItem[]>(initialProducts as ProductItem[]);
@@ -91,6 +138,9 @@ export default function LukeProdutosPage() {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
   const [formData, setFormData] = useState<Partial<ProductItem>>({
     code: "",
     name: "",
@@ -111,6 +161,44 @@ export default function LukeProdutosPage() {
   });
 
   const tenantId = "tenant_luke_001";
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setToast({
+        id: Date.now().toString(),
+        type: "error",
+        title: "Arquivo Inválido",
+        message: "Selecione um arquivo de imagem válido (PNG, JPG, WebP).",
+      });
+      return;
+    }
+
+    try {
+      setUploadingImage(true);
+      const optimizedBase64 = await compressImageFile(file);
+      setFormData((prev) => ({ ...prev, imageUrl: optimizedBase64 }));
+      setToast({
+        id: Date.now().toString(),
+        type: "success",
+        title: "Imagem Carregada",
+        message: "Foto do produto selecionada do computador com sucesso!",
+      });
+    } catch (err: any) {
+      console.error("Erro ao processar imagem:", err);
+      setToast({
+        id: Date.now().toString(),
+        type: "error",
+        title: "Falha na Imagem",
+        message: "Não foi possível processar o arquivo selecionado.",
+      });
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   // Carregar produtos do Firestore
   const fetchProductsFromFirestore = async () => {
@@ -702,33 +790,80 @@ export default function LukeProdutosPage() {
                 </div>
               </div>
 
-              {/* URL da Imagem com Preview */}
+              {/* Foto do Produto - Seleção de Arquivo do Computador */}
               <div>
-                <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
-                  Foto do Produto (URL)
+                <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1.5">
+                  Foto do Produto
                 </label>
-                <div className="flex space-x-3 items-center">
-                  <div className="w-12 h-12 rounded-xl bg-brand-black border border-brand-blue/40 overflow-hidden shrink-0 flex items-center justify-center">
+
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileSelect}
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="hidden"
+                />
+
+                <div className="flex flex-col sm:flex-row items-center gap-4 p-3.5 bg-brand-black/60 border border-brand-blue/40 rounded-xl">
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="relative w-20 h-20 rounded-xl bg-brand-black border-2 border-dashed border-brand-blue/50 hover:border-brand-gold overflow-hidden shrink-0 flex items-center justify-center cursor-pointer group transition shadow-inner"
+                    title="Clique para escolher foto do seu computador"
+                  >
                     {formData.imageUrl ? (
-                      <img
-                        src={formData.imageUrl}
-                        alt="Preview"
-                        className="w-full h-full object-cover"
-                        onError={(e: any) => {
-                          e.target.src = "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&auto=format&fit=crop&q=80";
-                        }}
-                      />
+                      <>
+                        <img
+                          src={formData.imageUrl}
+                          alt="Foto do Produto"
+                          className="w-full h-full object-cover group-hover:opacity-80 transition"
+                          onError={(e: any) => {
+                            e.target.src = "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&auto=format&fit=crop&q=80";
+                          }}
+                        />
+                        <div className="absolute inset-0 bg-brand-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+                          <Upload size={20} className="text-brand-gold" />
+                        </div>
+                      </>
                     ) : (
-                      <ImageIcon size={20} className="text-brand-offwhite/30" />
+                      <div className="flex flex-col items-center justify-center text-brand-offwhite/40 group-hover:text-brand-gold transition">
+                        <ImageIcon size={24} />
+                        <span className="text-[9px] mt-1 font-semibold">Foto</span>
+                      </div>
                     )}
                   </div>
-                  <input
-                    type="url"
-                    value={formData.imageUrl || ""}
-                    onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-                    className="flex-1 px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-xs text-brand-offwhite focus:outline-none focus:border-brand-gold font-mono"
-                    placeholder="https://exemplo.com/foto-produto.jpg"
-                  />
+
+                  <div className="flex-1 text-center sm:text-left space-y-2">
+                    <div>
+                      <p className="text-xs font-semibold text-brand-offwhite">
+                        {formData.imageUrl ? "Foto do produto pronta" : "Nenhuma foto selecionada"}
+                      </p>
+                      <p className="text-[11px] text-brand-offwhite/50">
+                        Clique abaixo para escolher um arquivo de imagem do seu computador (JPG, PNG ou WebP).
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 justify-center sm:justify-start">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploadingImage}
+                        className="px-3 py-1.5 bg-brand-gold text-brand-black rounded-lg text-xs font-bold hover:bg-yellow-500 transition shadow flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        <Upload size={13} />
+                        <span>{uploadingImage ? "Otimizando..." : formData.imageUrl ? "Trocar Foto do PC" : "Escolher Foto do Computador"}</span>
+                      </button>
+
+                      {formData.imageUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setFormData((prev) => ({ ...prev, imageUrl: "" }))}
+                          className="px-2.5 py-1.5 bg-brand-graphite border border-brand-blue/40 text-brand-offwhite/60 hover:text-red-400 rounded-lg text-xs transition hover:bg-red-500/10 cursor-pointer"
+                        >
+                          Remover Foto
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
 
