@@ -31,7 +31,8 @@ import {
   Edit2,
   Trash2,
 } from "lucide-react";
-import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch } from "firebase/firestore";
+import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch, onSnapshot } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 import { db, auth } from "@/lib/firebase";
 import initialCategories from "@/lib/financial_categories.json";
 import { usePrivacy } from "@/lib/privacyContext";
@@ -548,53 +549,102 @@ export default function LukeFinanceiroPage() {
     return item.status === "PENDING" && targetDate < todayStr;
   };
 
-  // Carregar do Firestore
+  // Carregar e sincronizar dados do Firestore com listener em tempo real (onSnapshot) e suporte a F5
   useEffect(() => {
-    const loadFinData = async () => {
+    let unsubPayables: (() => void) | null = null;
+    let unsubReceivables: (() => void) | null = null;
+    let unsubCategories: (() => void) | null = null;
+
+    const setupListeners = () => {
+      setLoadingFirestore(true);
+
+      // 1. Sincronização em Tempo Real de Contas a Pagar
       try {
-        setLoadingFirestore(true);
-        const [paySnap, recSnap, catSnap] = await Promise.all([
-          getDocs(collection(db, `tenants/${tenantId}/payables`)),
-          getDocs(collection(db, `tenants/${tenantId}/receivables`)),
-          getDocs(collection(db, `tenants/${tenantId}/categories`)),
-        ]);
-
-        const pList: PayableItem[] = [];
-        if (!paySnap.empty) {
-          paySnap.forEach((d) => pList.push({ id: d.id, ...d.data() } as PayableItem));
-        }
-        setPayables(pList);
-
-        const rList: ReceivableItem[] = [];
-        if (!recSnap.empty) {
-          recSnap.forEach((d) => rList.push({ id: d.id, ...d.data() } as ReceivableItem));
-        }
-        setReceivables(rList);
-
-        if (!catSnap.empty) {
-          const cList: any[] = [];
-          catSnap.forEach((d) => cList.push({ id: d.id, ...d.data() }));
-          cList.sort((a, b) => a.name.localeCompare(b.name));
-          setCategories(cList);
-        } else {
-          // Salva categorias padrão se Firestore estiver vazio
-          try {
-            const batch = writeBatch(db);
-            for (const c of initialCategories) {
-              batch.set(doc(db, `tenants/${tenantId}/categories`, c.id), c);
-            }
-            await batch.commit();
-          } catch (seedCatErr) {
-            console.warn("Silent initial categories seed:", seedCatErr);
+        unsubPayables = onSnapshot(
+          collection(db, `tenants/${tenantId}/payables`),
+          (snap) => {
+            const pList: PayableItem[] = [];
+            snap.forEach((d) => pList.push({ id: d.id, ...d.data() } as PayableItem));
+            setPayables(pList);
+            setLoadingFirestore(false);
+          },
+          (err) => {
+            console.warn("Realtime payables listener warning:", err.message);
+            setLoadingFirestore(false);
           }
-        }
+        );
       } catch (err: any) {
-        console.warn("Firestore finance fallback to initial:", err.message);
-      } finally {
-        setLoadingFirestore(false);
+        console.warn("Payables listener attach error:", err.message);
+      }
+
+      // 2. Sincronização em Tempo Real de Contas a Receber (P.A.)
+      try {
+        unsubReceivables = onSnapshot(
+          collection(db, `tenants/${tenantId}/receivables`),
+          (snap) => {
+            const rList: ReceivableItem[] = [];
+            snap.forEach((d) => rList.push({ id: d.id, ...d.data() } as ReceivableItem));
+            setReceivables(rList);
+          },
+          (err) => {
+            console.warn("Realtime receivables listener warning:", err.message);
+          }
+        );
+      } catch (err: any) {
+        console.warn("Receivables listener attach error:", err.message);
+      }
+
+      // 3. Sincronização em Tempo Real de Categorias
+      try {
+        unsubCategories = onSnapshot(
+          collection(db, `tenants/${tenantId}/categories`),
+          async (snap) => {
+            if (!snap.empty) {
+              const cList: any[] = [];
+              snap.forEach((d) => cList.push({ id: d.id, ...d.data() }));
+              cList.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+              setCategories(cList);
+            } else {
+              try {
+                const batch = writeBatch(db);
+                for (const c of initialCategories) {
+                  batch.set(doc(db, `tenants/${tenantId}/categories`, c.id), c);
+                }
+                await batch.commit();
+              } catch (seedCatErr) {
+                console.warn("Silent initial categories seed:", seedCatErr);
+              }
+            }
+          },
+          (err) => {
+            console.warn("Realtime categories listener warning:", err.message);
+          }
+        );
+      } catch (err: any) {
+        console.warn("Categories listener attach error:", err.message);
       }
     };
-    loadFinData();
+
+    // Revalidação imediata assim que a sessão de Auth for restabelecida após F5
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        if (!unsubPayables) {
+          setupListeners();
+        }
+      }
+    });
+
+    // Se usuário já estiver disponível no mount inicial (navegação entre abas SPA)
+    if (auth.currentUser) {
+      setupListeners();
+    }
+
+    return () => {
+      if (unsubPayables) unsubPayables();
+      if (unsubReceivables) unsubReceivables();
+      if (unsubCategories) unsubCategories();
+      unsubAuth();
+    };
   }, []);
 
   // Handler de Presets de Período
@@ -882,9 +932,9 @@ export default function LukeFinanceiroPage() {
       if (selectedYear !== "ALL" && selectedYear !== fYear) {
         setSelectedYear(fYear);
       }
-      if (isPaid && statusFilter === "PENDING") {
-        setStatusFilter("ALL");
-      }
+      // Garante que a lista exiba a nova despesa imediatamente sem ocultar por filtro
+      setStatusFilter("ALL");
+      setSearchTerm("");
 
       setIsPayableModalOpen(false);
       setPayableForm({
@@ -1343,11 +1393,12 @@ export default function LukeFinanceiroPage() {
         if (compYear !== selectedYear) return false;
       }
 
-      // Filtro de Busca
+      // Filtro de Busca Seguro contra campos indefinidos
+      const s = (searchTerm || "").toLowerCase();
       const matchSearch =
-        p.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.supplier.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.categoryName.toLowerCase().includes(searchTerm.toLowerCase());
+        (p.description || "").toLowerCase().includes(s) ||
+        (p.supplier || "").toLowerCase().includes(s) ||
+        (p.categoryName || "").toLowerCase().includes(s);
 
       // Filtro de Status
       let matchStatus = true;
@@ -1377,12 +1428,13 @@ export default function LukeFinanceiroPage() {
         if (targetYear !== selectedYear) return false;
       }
 
-      // Busca
+      // Busca Segura contra campos indefinidos
+      const s = (searchTerm || "").toLowerCase();
       const matchSearch =
-        r.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.buyerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.vendorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.routeId.toLowerCase().includes(searchTerm.toLowerCase());
+        (r.clientName || "").toLowerCase().includes(s) ||
+        (r.buyerName || "").toLowerCase().includes(s) ||
+        (r.vendorName || "").toLowerCase().includes(s) ||
+        (r.routeId || "").toLowerCase().includes(s);
 
       // Status
       let matchStatus = true;

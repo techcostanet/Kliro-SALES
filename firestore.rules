@@ -57,6 +57,16 @@ service cloud.firestore {
         allow read, write: if isAuthenticated();
       }
 
+      // Subcoleção de Categorias Financeiras
+      match /categories/{categoryId} {
+        allow read, write: if isAuthenticated();
+      }
+
+      // Subcoleção de Cargas (Carregamento de Rotas)
+      match /loads/{loadId} {
+        allow read, write: if isAuthenticated();
+      }
+
       // Subcoleção de Condições de Pagamento
       match /payment_terms/{termId} {
         allow read, write: if isAuthenticated();

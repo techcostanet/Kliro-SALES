@@ -4,6 +4,14 @@ Todas as melhorias, novidades e correções notáveis deste projeto serão docum
 
 ## [Unreleased]
 
+## [1.12.2] - 2026-09-15
+### Fixed
+- **Persistência e Sobrevivência ao F5 e Troca de Aba (`/luke/financeiro`)**:
+  - **Regras de Segurança do Firestore (`firestore.rules`)**: Adicionadas permissões multi-tenant explícitas para a subcoleção `categories` (`/tenants/{tenantId}/categories`) e `loads` (`/tenants/{tenantId}/loads`). A ausência de permissão na subcoleção de categorias fazia o `Promise.all` falhar silenciosamente por `Missing or insufficient permissions`, zerando as despesas em memória ao recarregar a página.
+  - **Sincronização em Tempo Real com `onSnapshot`**: Substituição de buscas estáticas `getDocs` por ouvintes em tempo real `onSnapshot` desacoplados para `payables`, `receivables` e `categories`. As despesas agora persistem no cache local (IndexedDB) e são refletidas instantaneamente sem qualquer perda de estado ao pressionar F5 ou navegar entre abas do sistema.
+  - **Revalidação Pós-Autenticação (`onAuthStateChanged`)**: Adicionado ouvinte de estado de autenticação do Firebase para garantir que os dados financeiros sejam imediatamente recarregados assim que o token da sessão for restaurado após o refresh (F5).
+  - **Tratamento Seguro de Filtros & Busca**: Inclusão de proteção contra valores nulos/indefinidos em `categoryName`, `supplier` e `description` no filtro de busca. Reset automático de `statusFilter` para `ALL` e limpeza de termos de busca ao cadastrar despesas, assegurando visibilidade imediata de despesas pagas e recorrentes.
+
 ## [1.12.1] - 2026-09-15
 ### Fixed
 - **Correção no Salvamento de Despesas Pagas no Ato (`/luke/financeiro`)**:
