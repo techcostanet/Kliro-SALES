@@ -4,6 +4,30 @@ Todas as melhorias, novidades e correções notáveis deste projeto serão docum
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-09-15
+### Added
+- **Gestão Completa de Despesas Recorrentes com Alertas & Multi-Opções (`/luke/financeiro`)**:
+  - **Identificação Inteligente de Recorrência**: Suporte a identificação de séries recorrentes por `recurrenceGroupId` ou fallback inteligente baseado no padrão nominal `(X/Y)`.
+  - **Alerta e Escopo na Edição de Despesas Recorrentes**:
+    - Ao abrir uma despesa recorrente no modal de edição, um card estilizado de aviso em Dark Gold / Amber com ícone pulsante `Repeat` informa a posição ordinal da parcela (`X de Y parcelas`) e disponibiliza 3 escopos de aplicação:
+      1. *Apenas esta parcela*: Atualiza somente a competência selecionada sem afetar as outras.
+      2. *Esta e todas as parcelas futuras*: Atualiza a parcela atual e propaga os novos valores, fornecedor, categoria, observações e dia de vencimento para as parcelas futuras em aberto.
+      3. *Todas as parcelas da série*: Atualiza a série completa em lote no Firestore via `writeBatch`.
+    - Preservação inteligente do status `PAID` e datas de quitação em parcelas já pagas da série para integridade contábil.
+  - **Modal Dedicado de Exclusão de Despesas Recorrentes**:
+    - Substituição do `confirm()` nativo por modal temático de alerta preventivo exibindo valor, competência e total de parcelas vinculadas.
+    - 4 opções de exclusão controlada com transação atômica em nuvem (`writeBatch`):
+      1. *Excluir APENAS esta parcela*: Remove somente o mês atual, mantendo as outras parcelas ativas.
+      2. *Excluir esta e todas as parcelas FUTURAS*: Cancela contratos/assinaturas a partir da data foco, mantendo intocado o histórico contábil anterior.
+      3. *Excluir TODAS as parcelas da série*: Remove por completo todos os lançamentos daquela despesa recorrente.
+      4. *Excluir apenas parcelas PENDENTES*: Preserva parcelas já quitadas no histórico e elimina somente as parcelas em aberto.
+  - **Badges Visuais na Tabela Financeira**: Ícone de repetição e badge `Recorrente (N parcelas)` na listagem de Contas a Pagar.
+
+### Fixed
+- **Abertura Dinâmica de Rotas na Data Atual (`/luke/rotas`)**:
+  - **Eliminação do Hardcode 27/08/2026**: A tela de Rotas agora inicializa dinamicamente no dia atual real do usuário (`new Date()`).
+  - **Sincronização de Visão Mensal e Semanal**: O mês e ano selecionados, o foco da data e o botão "Hoje" utilizam a data local do dispositivo, destacando o dia atual com anel dourado no grid e abrindo automaticamente na agenda correta.
+
 ## [1.12.2] - 2026-09-15
 ### Fixed
 - **Persistência e Sobrevivência ao F5 e Troca de Aba (`/luke/financeiro`)**:

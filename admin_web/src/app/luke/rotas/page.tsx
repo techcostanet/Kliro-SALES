@@ -118,17 +118,27 @@ const MONTH_NAMES = [
 
 const WEEK_DAYS = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
 
+const getTodayDateStr = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 export default function LukeRotasPage() {
   const { hideValues, togglePrivacy, formatValue } = usePrivacy();
 
-  // Estados principais
+  const todayStr = useMemo(() => getTodayDateStr(), []);
+
+  // Estados principais - Inicializa sempre na data atual do usuário
   const [scheduledEvents, setScheduledEvents] = useState<ScheduledRouteEvent[]>([]);
   const [availableRoutes, setAvailableRoutes] = useState<RouteMaster[]>(MASTER_ROUTES_CATALOG);
   const [vendorsList, setVendorsList] = useState<{ name: string; defaultColor: string }[]>(DEFAULT_VENDORS);
   const [viewMode, setViewMode] = useState<"MONTH" | "WEEK" | "DAY" | "LIST">("MONTH");
-  const [currentYear, setCurrentYear] = useState<number>(2026);
-  const [currentMonth, setCurrentMonth] = useState<number>(7); // 0-indexed (7 = Agosto)
-  const [selectedDate, setSelectedDate] = useState<string>("2026-08-27"); // Data foco
+  const [currentYear, setCurrentYear] = useState<number>(() => new Date().getFullYear());
+  const [currentMonth, setCurrentMonth] = useState<number>(() => new Date().getMonth()); // 0-indexed
+  const [selectedDate, setSelectedDate] = useState<string>(() => getTodayDateStr()); // Data foco (Hoje)
   const [loadingFirestore, setLoadingFirestore] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -175,7 +185,7 @@ export default function LukeRotasPage() {
           const d = docSnap.data();
           loaded.push({
             id: docSnap.id,
-            date: d.date || "2026-08-27",
+            date: d.date || todayStr,
             routeCode: d.routeCode || "R1",
             routeName: d.routeName || "Rota",
             vendorName: d.vendorName || "Alisson",
@@ -332,10 +342,11 @@ export default function LukeRotasPage() {
   };
 
   const handleToday = () => {
-    const today = "2026-08-27"; // Data de referência da sessão
+    const d = new Date();
+    const today = getTodayDateStr();
     setSelectedDate(today);
-    setCurrentMonth(7);
-    setCurrentYear(2026);
+    setCurrentMonth(d.getMonth());
+    setCurrentYear(d.getFullYear());
   };
 
   // Gerador de Dias do Calendário Mensal
@@ -397,16 +408,16 @@ export default function LukeRotasPage() {
     for (let i = 0; i < 7; i++) {
       const d = new Date(startOfWeek);
       d.setDate(startOfWeek.getDate() + i);
-      const dateStr = d.toISOString().split("T")[0];
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       days.push({
         dateStr,
         dayNum: d.getDate(),
         dayName: WEEK_DAYS[i],
-        isToday: dateStr === "2026-08-27",
+        isToday: dateStr === todayStr,
       });
     }
     return days;
-  }, [selectedDate]);
+  }, [selectedDate, todayStr]);
 
   // Mapa de Eventos por Data com Filtros Aplicados
   const eventsByDate = useMemo(() => {
@@ -1016,7 +1027,7 @@ export default function LukeRotasPage() {
             {calendarDays.map((dayObj, index) => {
               const dateEvents = eventsByDate[dayObj.dateStr] || [];
               const special = SPECIAL_EVENTS[dayObj.dateStr];
-              const isToday = dayObj.dateStr === "2026-08-27";
+              const isToday = dayObj.dateStr === todayStr;
               const isSelected = dayObj.dateStr === selectedDate;
 
               return (

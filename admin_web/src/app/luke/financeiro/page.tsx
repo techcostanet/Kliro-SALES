@@ -30,6 +30,7 @@ import {
   Cloud,
   Edit2,
   Trash2,
+  Repeat,
 } from "lucide-react";
 import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch, onSnapshot } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
@@ -75,9 +76,70 @@ export interface PayableItem {
   status: "PENDING" | "PAID" | "OVERDUE";
   recurrence?: boolean;
   recurrenceMonths?: number;
+  recurrenceGroupId?: string;
+  recurrenceIndex?: number;
   notes?: string;
   auditTrail?: string[];
 }
+
+// Helpers Especialistas para Gestão e Sincronização de Despesas Recorrentes
+export const isRecurringPayable = (item: PayableItem): boolean => {
+  if (item.recurrence) return true;
+  if (Boolean(item.recurrenceGroupId)) return true;
+  if (item.recurrenceMonths && item.recurrenceMonths > 1) return true;
+  if (/\s*\(\d+\/\d+\)$/.test(item.description || "")) return true;
+  return false;
+};
+
+export const getRecurringSeries = (item: PayableItem, allItems: PayableItem[]): PayableItem[] => {
+  if (item.recurrenceGroupId) {
+    const series = allItems.filter((p) => p.recurrenceGroupId === item.recurrenceGroupId);
+    if (series.length > 0) {
+      return [...series].sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || ""));
+    }
+  }
+
+  // Fallback inteligente para despesas recorrentes legadas pelo padrão de descrição: "Nome (X/Y)"
+  const match = (item.description || "").match(/^(.*?)\s*\((\d+)\/(\d+)\)$/);
+  if (match) {
+    const baseName = match[1].trim().toLowerCase();
+    const total = Number(match[3]);
+    const series = allItems.filter((p) => {
+      if (p.id === item.id) return true;
+      const m = (p.description || "").match(/^(.*?)\s*\((\d+)\/(\d+)\)$/);
+      if (!m) return false;
+      const itemBase = m[1].trim().toLowerCase();
+      return (
+        itemBase === baseName &&
+        Number(m[3]) === total &&
+        (p.supplier || "").trim().toLowerCase() === (item.supplier || "").trim().toLowerCase()
+      );
+    });
+    return [...series].sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || ""));
+  }
+
+  return [item];
+};
+
+export const getRecurrenceIndex = (item: PayableItem, series: PayableItem[]): number => {
+  if (item.recurrenceIndex) return item.recurrenceIndex;
+  const match = (item.description || "").match(/\((\d+)\/(\d+)\)$/);
+  if (match) return Number(match[1]);
+  const idx = series.findIndex((p) => p.id === item.id);
+  return idx >= 0 ? idx + 1 : 1;
+};
+
+export const getFutureRecurrenceItems = (item: PayableItem, series: PayableItem[]): PayableItem[] => {
+  const currentIndex = getRecurrenceIndex(item, series);
+  return series.filter((p) => {
+    const pIndex = getRecurrenceIndex(p, series);
+    return pIndex >= currentIndex;
+  });
+};
+
+export const getBaseDescription = (desc: string): string => {
+  return desc.replace(/\s*\(\d+\/\d+\)$/, "").trim();
+};
 
 export interface ReceivableItem {
   id: string;
@@ -445,7 +507,8 @@ export default function LukeFinanceiroPage() {
   const now = new Date();
   const curMonthStr = String(now.getMonth() + 1).padStart(2, "0");
   const curYearStr = String(now.getFullYear());
-  const todayStr = now.toISOString().split("T")[0];
+  const curDayStr = String(now.getDate()).padStart(2, "0");
+  const todayStr = `${curYearStr}-${curMonthStr}-${curDayStr}`;
 
   // Filtros Globais / Por Aba (Iniciam no mês corrente real)
   const [selectedMonth, setSelectedMonth] = useState(curMonthStr);
@@ -459,6 +522,16 @@ export default function LukeFinanceiroPage() {
   const [editingPayable, setEditingPayable] = useState<PayableItem | null>(null);
   const [isSavingPayable, setIsSavingPayable] = useState(false);
   const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+
+  // Estados de Controle de Despesas Recorrentes (Edição e Exclusão)
+  const [isDeleteRecurringModalOpen, setIsDeleteRecurringModalOpen] = useState(false);
+  const [payableToDelete, setPayableToDelete] = useState<PayableItem | null>(null);
+  const [deleteRecurringSeries, setDeleteRecurringSeries] = useState<PayableItem[]>([]);
+  const [isDeletingPayable, setIsDeletingPayable] = useState(false);
+
+  // Escopo de Edição Recorrente
+  const [editRecurringScope, setEditRecurringScope] = useState<"ONLY_THIS" | "THIS_AND_FUTURE" | "ALL">("ONLY_THIS");
+  const [editingPayableSeries, setEditingPayableSeries] = useState<PayableItem[]>([]);
 
   // Modais de Contas a Receber
   const [isReceivableModalOpen, setIsReceivableModalOpen] = useState(false);
@@ -696,6 +769,15 @@ export default function LukeFinanceiroPage() {
   const handleOpenPayableModal = (item?: PayableItem) => {
     if (item) {
       setEditingPayable(item);
+      const isRec = isRecurringPayable(item);
+      if (isRec) {
+        const series = getRecurringSeries(item, payables);
+        setEditingPayableSeries(series);
+        setEditRecurringScope("ONLY_THIS");
+      } else {
+        setEditingPayableSeries([]);
+        setEditRecurringScope("ONLY_THIS");
+      }
       setPayableForm({
         description: item.description || "",
         categoryId: item.categoryId || "CAT-001",
@@ -712,6 +794,8 @@ export default function LukeFinanceiroPage() {
       });
     } else {
       setEditingPayable(null);
+      setEditingPayableSeries([]);
+      setEditRecurringScope("ONLY_THIS");
       setPayableForm({
         description: "",
         categoryId: "CAT-001",
@@ -731,8 +815,24 @@ export default function LukeFinanceiroPage() {
     setIsPayableModalOpen(true);
   };
 
-  // Excluir Conta a Pagar
-  const handleDeletePayable = async (item: PayableItem) => {
+  // Excluir Conta a Pagar - Detecta Recorrência e Abre Modal Especializado se Necessário
+  const handleDeletePayable = (item: PayableItem) => {
+    if (isRecurringPayable(item)) {
+      const series = getRecurringSeries(item, payables);
+      if (series.length > 1) {
+        setPayableToDelete(item);
+        setDeleteRecurringSeries(series);
+        setIsDeleteRecurringModalOpen(true);
+        return;
+      }
+    }
+
+    // Despesa comum avulsa
+    executeSinglePayableDelete(item);
+  };
+
+  // Executa Exclusão de Parcela Avulsa
+  const executeSinglePayableDelete = async (item: PayableItem) => {
     if (!confirm(`Deseja realmente excluir a despesa "${item.description}" (${formatCurrency(item.amount)})?`)) {
       return;
     }
@@ -757,7 +857,69 @@ export default function LukeFinanceiroPage() {
     }
   };
 
-  // Salvar Conta a Pagar (Criação ou Edição)
+  // Executa Exclusão com Escopo para Despesas Recorrentes
+  const executeRecurringDelete = async (action: "ONLY_THIS" | "THIS_AND_FUTURE" | "ALL" | "ONLY_PENDING") => {
+    if (!payableToDelete) return;
+    setIsDeletingPayable(true);
+    try {
+      let itemsToRemove: PayableItem[] = [];
+
+      if (action === "ONLY_THIS") {
+        itemsToRemove = [payableToDelete];
+      } else if (action === "THIS_AND_FUTURE") {
+        itemsToRemove = getFutureRecurrenceItems(payableToDelete, deleteRecurringSeries);
+      } else if (action === "ALL") {
+        itemsToRemove = deleteRecurringSeries;
+      } else if (action === "ONLY_PENDING") {
+        itemsToRemove = deleteRecurringSeries.filter((p) => p.status !== "PAID");
+      }
+
+      if (itemsToRemove.length === 0) {
+        setToast({
+          type: "cloud_error",
+          title: "Nenhuma Parcela Selecionada",
+          message: "Não foram encontradas parcelas correspondentes ao filtro selecionado.",
+          isCloud: true,
+        });
+        setIsDeleteRecurringModalOpen(false);
+        return;
+      }
+
+      const batch = writeBatch(db);
+      for (const it of itemsToRemove) {
+        batch.delete(doc(db, `tenants/${tenantId}/payables`, it.id));
+      }
+      await batch.commit();
+
+      const removedIds = new Set(itemsToRemove.map((it) => it.id));
+      setPayables((prev) => prev.filter((p) => !removedIds.has(p.id)));
+
+      setToast({
+        type: "cloud_success",
+        title: itemsToRemove.length > 1 ? `${itemsToRemove.length} Parcelas Excluídas na Nuvem!` : "Parcela Excluída na Nuvem!",
+        message: itemsToRemove.length > 1
+          ? `Foram removidas ${itemsToRemove.length} parcelas da série recorrente com sucesso do Firestore.`
+          : `A parcela "${payableToDelete.description}" foi removida com sucesso do Firestore.`,
+        isCloud: true,
+      });
+
+      setIsDeleteRecurringModalOpen(false);
+      setPayableToDelete(null);
+      setDeleteRecurringSeries([]);
+    } catch (err: any) {
+      console.error("Erro ao excluir parcelas recorrentes:", err);
+      setToast({
+        type: "cloud_error",
+        title: "Erro ao Excluir da Nuvem",
+        message: err?.message || "Não foi possível remover as parcelas selecionadas.",
+        isCloud: true,
+      });
+    } finally {
+      setIsDeletingPayable(false);
+    }
+  };
+
+  // Salvar Conta a Pagar (Criação ou Edição com Suporte Completo à Recorrência)
   const handleSavePayable = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!payableForm.description?.trim()) return;
@@ -769,44 +931,136 @@ export default function LukeFinanceiroPage() {
     if (editingPayable) {
       setIsSavingPayable(true);
       try {
-        const updatedItem: PayableItem = {
-          ...editingPayable,
-          description: payableForm.description.trim(),
-          categoryId: payableForm.categoryId || "CAT-001",
-          categoryName: catObj?.name || editingPayable.categoryName || "Despesa Operacional",
-          supplier: payableForm.supplier?.trim() || "Diversos",
-          amount: Number(payableForm.amount || 0),
-          dueDate: baseDueDate,
-          competence: payableForm.competence?.trim() || editingPayable.competence || `${curMonthStr}/${curYearStr}`,
-          notes: payableForm.notes?.trim() || "",
-          status: isPaid ? "PAID" : baseDueDate < todayStr ? "OVERDUE" : "PENDING",
-        };
+        const isRecurring = isRecurringPayable(editingPayable) && editingPayableSeries.length > 1;
 
-        if (isPaid) {
-          updatedItem.paymentDate = payableForm.paymentDate?.trim() || todayStr;
-          updatedItem.paymentMethod = payableForm.paymentMethod || "PIX";
+        if (!isRecurring || editRecurringScope === "ONLY_THIS") {
+          // Atualiza apenas a parcela individual
+          const updatedItem: PayableItem = {
+            ...editingPayable,
+            description: payableForm.description.trim(),
+            categoryId: payableForm.categoryId || "CAT-001",
+            categoryName: catObj?.name || editingPayable.categoryName || "Despesa Operacional",
+            supplier: payableForm.supplier?.trim() || "Diversos",
+            amount: Number(payableForm.amount || 0),
+            dueDate: baseDueDate,
+            competence: payableForm.competence?.trim() || editingPayable.competence || `${curMonthStr}/${curYearStr}`,
+            notes: payableForm.notes?.trim() || "",
+            status: isPaid ? "PAID" : baseDueDate < todayStr ? "OVERDUE" : "PENDING",
+          };
+
+          if (isPaid) {
+            updatedItem.paymentDate = payableForm.paymentDate?.trim() || todayStr;
+            updatedItem.paymentMethod = payableForm.paymentMethod || "PIX";
+          } else {
+            delete updatedItem.paymentDate;
+            delete updatedItem.paymentMethod;
+          }
+
+          const firestoreData = cleanFirestoreData({
+            ...updatedItem,
+            updatedAt: new Date().toISOString(),
+          });
+
+          await setDoc(doc(db, `tenants/${tenantId}/payables`, editingPayable.id), firestoreData, { merge: true });
+
+          setPayables((prev) => prev.map((p) => (p.id === editingPayable.id ? updatedItem : p)));
+          setToast({
+            type: "cloud_success",
+            title: "Despesa Atualizada na Nuvem!",
+            message: `Despesa "${updatedItem.description}" sincronizada no Firestore.`,
+            isCloud: true,
+          });
         } else {
-          delete updatedItem.paymentDate;
-          delete updatedItem.paymentMethod;
+          // Atualização em Lote com Escopo (THIS_AND_FUTURE ou ALL)
+          const targetItems =
+            editRecurringScope === "THIS_AND_FUTURE"
+              ? getFutureRecurrenceItems(editingPayable, editingPayableSeries)
+              : editingPayableSeries;
+
+          const baseCleanDesc = getBaseDescription(payableForm.description);
+          const newAmount = Number(payableForm.amount || 0);
+          const newSupplier = payableForm.supplier?.trim() || "Diversos";
+          const newCategoryId = payableForm.categoryId || "CAT-001";
+          const newCategoryName = catObj?.name || editingPayable.categoryName || "Despesa Operacional";
+          const newNotes = payableForm.notes?.trim() || "";
+
+          // Ajuste proporcional do dia de vencimento se o usuário alterou o dia
+          const origDay = Number((editingPayable.dueDate || "").split("-")[2] || 1);
+          const newDay = Number(baseDueDate.split("-")[2] || 1);
+          const dayChanged = origDay !== newDay;
+
+          const updatedBatchItems: PayableItem[] = [];
+          const batch = writeBatch(db);
+
+          for (const it of targetItems) {
+            const itemIdx = getRecurrenceIndex(it, editingPayableSeries);
+            const itemUpdated: PayableItem = {
+              ...it,
+              description: `${baseCleanDesc} (${itemIdx}/${editingPayableSeries.length})`,
+              categoryId: newCategoryId,
+              categoryName: newCategoryName,
+              supplier: newSupplier,
+              amount: newAmount,
+              notes: newNotes,
+            };
+
+            // Ajuste do dia de vencimento respeitando os dias máximos do mês de cada parcela
+            if (dayChanged && it.dueDate) {
+              const [y, m] = it.dueDate.split("-");
+              const daysInM = new Date(Number(y), Number(m), 0).getDate();
+              const targetD = Math.min(newDay, daysInM);
+              itemUpdated.dueDate = `${y}-${m}-${String(targetD).padStart(2, "0")}`;
+            }
+
+            // Se for o item atualmente selecionado no formulário:
+            if (it.id === editingPayable.id) {
+              if (isPaid) {
+                itemUpdated.status = "PAID";
+                itemUpdated.paymentDate = payableForm.paymentDate?.trim() || todayStr;
+                itemUpdated.paymentMethod = payableForm.paymentMethod || "PIX";
+              } else {
+                itemUpdated.status = itemUpdated.dueDate < todayStr ? "OVERDUE" : "PENDING";
+                delete itemUpdated.paymentDate;
+                delete itemUpdated.paymentMethod;
+              }
+            } else {
+              // Para as outras parcelas da série:
+              // Se já estava PAID, preserva status e comprovante
+              // Se estava PENDING/OVERDUE, recalcula status
+              if (itemUpdated.status !== "PAID") {
+                itemUpdated.status = itemUpdated.dueDate < todayStr ? "OVERDUE" : "PENDING";
+              }
+            }
+
+            const docRef = doc(db, `tenants/${tenantId}/payables`, it.id);
+            batch.set(
+              docRef,
+              cleanFirestoreData({
+                ...itemUpdated,
+                updatedAt: new Date().toISOString(),
+              }),
+              { merge: true }
+            );
+
+            updatedBatchItems.push(itemUpdated);
+          }
+
+          await batch.commit();
+
+          const updatedMap = new Map(updatedBatchItems.map((u) => [u.id, u]));
+          setPayables((prev) => prev.map((p) => updatedMap.get(p.id) || p));
+
+          setToast({
+            type: "cloud_success",
+            title: `${updatedBatchItems.length} Parcelas Atualizadas na Nuvem!`,
+            message: `A série recorrente "${baseCleanDesc}" foi sincronizada com sucesso no Firestore (${updatedBatchItems.length} parcelas alteradas).`,
+            isCloud: true,
+          });
         }
-
-        const firestoreData = cleanFirestoreData({
-          ...updatedItem,
-          updatedAt: new Date().toISOString(),
-        });
-
-        await setDoc(doc(db, `tenants/${tenantId}/payables`, editingPayable.id), firestoreData, { merge: true });
-
-        setPayables((prev) => prev.map((p) => (p.id === editingPayable.id ? updatedItem : p)));
-        setToast({
-          type: "cloud_success",
-          title: "Despesa Atualizada na Nuvem!",
-          message: `Despesa "${updatedItem.description}" sincronizada no Firestore.`,
-          isCloud: true,
-        });
 
         setIsPayableModalOpen(false);
         setEditingPayable(null);
+        setEditingPayableSeries([]);
       } catch (err: any) {
         console.error("Erro ao atualizar despesa:", err);
         setToast({
@@ -827,6 +1081,7 @@ export default function LukeFinanceiroPage() {
       // Cria as parcelas recorrentes para TODOS os meses selecionados (ex: 2, 3, 6, 12, 24, 36)
       const totalMonths = Math.min(Math.max(payableForm.recurrenceMonths, 2), 36);
       const [initY, initM, initD] = baseDueDate.split("-").map(Number);
+      const recurrenceGroupId = `recgrp-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
       for (let i = 0; i < totalMonths; i++) {
         // Cálculo aritmético preciso de mês e ano para evitar overflow de dia em meses curtos
@@ -846,6 +1101,8 @@ export default function LukeFinanceiroPage() {
 
         const newItem: PayableItem = {
           id: `pay-${Date.now()}-${i + 1}-${Math.random().toString(36).substring(2, 6)}`,
+          recurrenceGroupId,
+          recurrenceIndex: i + 1,
           description: `${payableForm.description.trim()} (${i + 1}/${totalMonths})`,
           categoryId: payableForm.categoryId || "CAT-001",
           categoryName: catObj?.name || "Despesa Operacional",
@@ -1777,11 +2034,19 @@ export default function LukeFinanceiroPage() {
                   return (
                     <tr key={item.id} className="hover:bg-brand-blue/5 transition group">
                       <td className="p-4 font-semibold text-brand-offwhite">
-                        <p>{item.description}</p>
+                        <div className="flex items-center space-x-1.5">
+                          <span>{item.description}</span>
+                          {isRecurringPayable(item) && (
+                            <span title="Despesa Recorrente">
+                              <Repeat size={13} className="text-amber-400 shrink-0 inline-block" />
+                            </span>
+                          )}
+                        </div>
                         {item.notes && <p className="text-xs text-brand-offwhite/40 mt-0.5">{item.notes}</p>}
-                        {item.recurrence && (
-                          <span className="inline-block mt-1 text-[10px] bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded font-mono border border-blue-500/30">
-                            Recorrente ({item.recurrenceMonths || 12} meses)
+                        {isRecurringPayable(item) && (
+                          <span className="inline-flex items-center space-x-1 mt-1 text-[10px] bg-amber-500/15 text-amber-300 px-2 py-0.5 rounded font-mono border border-amber-500/30">
+                            <Repeat size={10} />
+                            <span>Recorrente ({item.recurrenceMonths || "Série"} parcelas)</span>
                           </span>
                         )}
                       </td>
@@ -2284,6 +2549,100 @@ export default function LukeFinanceiroPage() {
             </div>
 
             <form onSubmit={handleSavePayable} className="space-y-4">
+              {/* ALERTA VISUAL E ESCOPO DE EDIÇÃO PARA DESPESAS RECORRENTES */}
+              {editingPayable && isRecurringPayable(editingPayable) && editingPayableSeries.length > 1 && (
+                <div className="p-3.5 bg-amber-500/10 border border-amber-500/40 rounded-xl space-y-3">
+                  <div className="flex items-start space-x-2.5">
+                    <div className="p-2 rounded-lg bg-amber-500/20 text-amber-400 shrink-0">
+                      <Repeat size={18} />
+                    </div>
+                    <div>
+                      <div className="inline-flex items-center space-x-1.5 px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-mono font-bold uppercase tracking-wider mb-0.5">
+                        <AlertCircle size={10} />
+                        <span>Despesa Recorrente ({getRecurrenceIndex(editingPayable, editingPayableSeries)} de {editingPayableSeries.length} parcelas)</span>
+                      </div>
+                      <p className="text-[11px] text-brand-offwhite/70 leading-relaxed">
+                        Esta despesa se repete em múltiplos meses. Selecione onde você deseja aplicar as alterações:
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Opções de Escopo de Edição */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setEditRecurringScope("ONLY_THIS")}
+                      className={`p-2.5 rounded-lg border text-left flex flex-col justify-between transition cursor-pointer ${
+                        editRecurringScope === "ONLY_THIS"
+                          ? "bg-amber-500/20 border-amber-400 text-amber-300 ring-1 ring-amber-400/50"
+                          : "bg-brand-black/40 border-brand-blue/30 text-brand-offwhite/70 hover:border-brand-blue/60"
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2 mb-1">
+                        <input
+                          type="radio"
+                          name="editScope"
+                          checked={editRecurringScope === "ONLY_THIS"}
+                          onChange={() => setEditRecurringScope("ONLY_THIS")}
+                          className="text-brand-gold focus:ring-brand-gold cursor-pointer"
+                        />
+                        <span className="text-xs font-bold">Apenas esta parcela</span>
+                      </div>
+                      <span className="text-[10px] opacity-75">
+                        Altera somente este mês ({editingPayable.competence}).
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setEditRecurringScope("THIS_AND_FUTURE")}
+                      className={`p-2.5 rounded-lg border text-left flex flex-col justify-between transition cursor-pointer ${
+                        editRecurringScope === "THIS_AND_FUTURE"
+                          ? "bg-amber-500/20 border-amber-400 text-amber-300 ring-1 ring-amber-400/50"
+                          : "bg-brand-black/40 border-brand-blue/30 text-brand-offwhite/70 hover:border-brand-blue/60"
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2 mb-1">
+                        <input
+                          type="radio"
+                          name="editScope"
+                          checked={editRecurringScope === "THIS_AND_FUTURE"}
+                          onChange={() => setEditRecurringScope("THIS_AND_FUTURE")}
+                          className="text-brand-gold focus:ring-brand-gold cursor-pointer"
+                        />
+                        <span className="text-xs font-bold">Esta e futuras ({getFutureRecurrenceItems(editingPayable, editingPayableSeries).length})</span>
+                      </div>
+                      <span className="text-[10px] opacity-75">
+                        Da parcela atual até o fim. Mantém as anteriores.
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setEditRecurringScope("ALL")}
+                      className={`p-2.5 rounded-lg border text-left flex flex-col justify-between transition cursor-pointer ${
+                        editRecurringScope === "ALL"
+                          ? "bg-amber-500/20 border-amber-400 text-amber-300 ring-1 ring-amber-400/50"
+                          : "bg-brand-black/40 border-brand-blue/30 text-brand-offwhite/70 hover:border-brand-blue/60"
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2 mb-1">
+                        <input
+                          type="radio"
+                          name="editScope"
+                          checked={editRecurringScope === "ALL"}
+                          onChange={() => setEditRecurringScope("ALL")}
+                          className="text-brand-gold focus:ring-brand-gold cursor-pointer"
+                        />
+                        <span className="text-xs font-bold">Todas as parcelas ({editingPayableSeries.length})</span>
+                      </div>
+                      <span className="text-[10px] opacity-75">
+                        Atualiza todas as parcelas da série.
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
                   Descrição da Despesa
@@ -2511,41 +2870,43 @@ export default function LukeFinanceiroPage() {
                 )}
               </div>
 
-              {/* RECORRÊNCIA COM SELETOR DE MESES (ITEM 7) */}
-              <div className="p-3 bg-brand-black/50 rounded-xl border border-brand-blue/30 space-y-3">
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="recurrence-box"
-                    checked={payableForm.recurrence}
-                    onChange={(e) => setPayableForm({ ...payableForm, recurrence: e.target.checked })}
-                    className="rounded bg-brand-black border-brand-blue/50 text-brand-gold focus:ring-brand-gold"
-                  />
-                  <label htmlFor="recurrence-box" className="text-xs text-brand-offwhite/80 cursor-pointer font-bold">
-                    Conta fixa / recorrente mensal
-                  </label>
-                </div>
-
-                {payableForm.recurrence && (
-                  <div className="pt-2 border-t border-brand-blue/20 flex items-center justify-between gap-3">
-                    <span className="text-xs text-brand-offwhite/70">
-                      Por quantos meses deseja programar esta despesa?
-                    </span>
-                    <select
-                      value={payableForm.recurrenceMonths}
-                      onChange={(e) => setPayableForm({ ...payableForm, recurrenceMonths: Number(e.target.value) })}
-                      className="bg-brand-graphite border border-brand-blue/40 text-brand-gold text-xs rounded-lg px-3 py-1.5 font-bold focus:outline-none focus:border-brand-gold"
-                    >
-                      <option value={2}>2 meses</option>
-                      <option value={3}>3 meses (Trimestral)</option>
-                      <option value={6}>6 meses (Semestral)</option>
-                      <option value={12}>12 meses (1 Ano)</option>
-                      <option value={24}>24 meses (2 Anos)</option>
-                      <option value={36}>36 meses (3 Anos)</option>
-                    </select>
+              {/* RECORRÊNCIA COM SELETOR DE MESES (ITEM 7) - APENAS EM NOVO CADASTRO */}
+              {!editingPayable && (
+                <div className="p-3 bg-brand-black/50 rounded-xl border border-brand-blue/30 space-y-3">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="recurrence-box"
+                      checked={payableForm.recurrence}
+                      onChange={(e) => setPayableForm({ ...payableForm, recurrence: e.target.checked })}
+                      className="rounded bg-brand-black border-brand-blue/50 text-brand-gold focus:ring-brand-gold"
+                    />
+                    <label htmlFor="recurrence-box" className="text-xs text-brand-offwhite/80 cursor-pointer font-bold">
+                      Conta fixa / recorrente mensal
+                    </label>
                   </div>
-                )}
-              </div>
+
+                  {payableForm.recurrence && (
+                    <div className="pt-2 border-t border-brand-blue/20 flex items-center justify-between gap-3">
+                      <span className="text-xs text-brand-offwhite/70">
+                        Por quantos meses deseja programar esta despesa?
+                      </span>
+                      <select
+                        value={payableForm.recurrenceMonths}
+                        onChange={(e) => setPayableForm({ ...payableForm, recurrenceMonths: Number(e.target.value) })}
+                        className="bg-brand-graphite border border-brand-blue/40 text-brand-gold text-xs rounded-lg px-3 py-1.5 font-bold focus:outline-none focus:border-brand-gold"
+                      >
+                        <option value={2}>2 meses</option>
+                        <option value={3}>3 meses (Trimestral)</option>
+                        <option value={6}>6 meses (Semestral)</option>
+                        <option value={12}>12 meses (1 Ano)</option>
+                        <option value={24}>24 meses (2 Anos)</option>
+                        <option value={36}>36 meses (3 Anos)</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-semibold text-brand-offwhite/70 mb-1">
@@ -2581,12 +2942,197 @@ export default function LukeFinanceiroPage() {
                   ) : (
                     <>
                       <Cloud size={15} className="text-brand-black" />
-                      <span>{editingPayable ? "Salvar Alterações" : "Salvar Despesa"}</span>
+                      <span>
+                        {editingPayable
+                          ? editRecurringScope === "THIS_AND_FUTURE"
+                            ? `Salvar em ${getFutureRecurrenceItems(editingPayable, editingPayableSeries).length} Parcelas`
+                            : editRecurringScope === "ALL"
+                            ? `Salvar em Todas as ${editingPayableSeries.length} Parcelas`
+                            : "Salvar Alterações Nesta Parcela"
+                          : "Salvar Despesa"}
+                      </span>
                     </>
                   )}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE ALERTA E OPÇÕES PARA DESPESAS RECORRENTES (EXCLUSÃO) */}
+      {isDeleteRecurringModalOpen && payableToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-brand-black/85 backdrop-blur-sm">
+          <div className="bg-brand-graphite w-full max-w-lg rounded-2xl border border-amber-500/50 shadow-2xl p-6 relative">
+            <button
+              onClick={() => {
+                setIsDeleteRecurringModalOpen(false);
+                setPayableToDelete(null);
+                setDeleteRecurringSeries([]);
+              }}
+              className="absolute top-4 right-4 text-brand-offwhite/50 hover:text-brand-offwhite p-1 rounded-lg hover:bg-brand-blue/20 transition cursor-pointer"
+            >
+              <X size={20} />
+            </button>
+
+            {/* Cabeçalho com Alerta Visual */}
+            <div className="flex items-center space-x-3 mb-5">
+              <div className="w-11 h-11 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30 shrink-0">
+                <Repeat size={22} className="text-amber-400" />
+              </div>
+              <div>
+                <div className="inline-flex items-center space-x-1.5 px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/30 text-amber-300 text-[10px] font-mono font-bold uppercase tracking-wider mb-1">
+                  <AlertCircle size={11} />
+                  <span>Despesa Recorrente Detectada</span>
+                </div>
+                <h3 className="text-lg font-bold text-brand-offwhite">
+                  Excluir Despesa Recorrente
+                </h3>
+              </div>
+            </div>
+
+            {/* Detalhes da Despesa Alvo */}
+            <div className="p-4 bg-brand-black/60 rounded-xl border border-brand-blue/30 mb-5 space-y-1.5">
+              <p className="text-xs text-brand-offwhite/50">Lançamento selecionado:</p>
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-bold text-brand-offwhite truncate pr-2">
+                  {payableToDelete.description}
+                </p>
+                <span className="text-sm font-mono font-black text-amber-400 shrink-0">
+                  {formatCurrency(payableToDelete.amount)}
+                </span>
+              </div>
+              <div className="flex items-center space-x-3 text-xs text-brand-offwhite/70 pt-1">
+                <span>Competência: <strong className="text-brand-offwhite">{payableToDelete.competence}</strong></span>
+                <span>•</span>
+                <span>Vencimento: <strong className="text-brand-offwhite">{formatDateBR(payableToDelete.dueDate)}</strong></span>
+                <span>•</span>
+                <span>Total na Série: <strong className="text-brand-gold">{deleteRecurringSeries.length} parcelas</strong></span>
+              </div>
+            </div>
+
+            <p className="text-xs text-brand-offwhite/80 mb-3 font-semibold">
+              Como você deseja prosseguir com a exclusão? Escolha uma das opções abaixo:
+            </p>
+
+            {/* Grid de Opções de Exclusão */}
+            <div className="space-y-2.5 mb-6">
+              {/* Opção 1: Apenas esta parcela */}
+              <button
+                type="button"
+                disabled={isDeletingPayable}
+                onClick={() => executeRecurringDelete("ONLY_THIS")}
+                className="w-full p-3 bg-brand-black/50 hover:bg-brand-black border border-brand-blue/30 hover:border-amber-400/60 rounded-xl text-left transition flex items-start space-x-3 group cursor-pointer disabled:opacity-50"
+              >
+                <div className="p-2 rounded-lg bg-brand-blue/20 text-brand-offwhite/80 group-hover:text-amber-400 shrink-0 mt-0.5">
+                  <Trash2 size={16} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-brand-offwhite group-hover:text-amber-300">
+                      1. Excluir APENAS esta parcela ({getRecurrenceIndex(payableToDelete, deleteRecurringSeries)} de {deleteRecurringSeries.length})
+                    </span>
+                    <span className="text-[10px] text-brand-offwhite/40 font-mono">1 parcela</span>
+                  </div>
+                  <p className="text-[11px] text-brand-offwhite/60 mt-0.5">
+                    Remove somente o registro de {payableToDelete.competence}. As demais {deleteRecurringSeries.length - 1} parcelas continuam ativas no sistema.
+                  </p>
+                </div>
+              </button>
+
+              {/* Opção 2: Esta e todas as futuras */}
+              <button
+                type="button"
+                disabled={isDeletingPayable}
+                onClick={() => executeRecurringDelete("THIS_AND_FUTURE")}
+                className="w-full p-3 bg-brand-black/50 hover:bg-brand-black border border-brand-blue/30 hover:border-amber-400/60 rounded-xl text-left transition flex items-start space-x-3 group cursor-pointer disabled:opacity-50"
+              >
+                <div className="p-2 rounded-lg bg-amber-500/20 text-amber-400 shrink-0 mt-0.5">
+                  <ArrowUpRight size={16} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-brand-offwhite group-hover:text-amber-300">
+                      2. Excluir esta e todas as parcelas FUTURAS
+                    </span>
+                    <span className="text-[10px] text-amber-400 font-mono font-bold">
+                      {getFutureRecurrenceItems(payableToDelete, deleteRecurringSeries).length} parcelas
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-brand-offwhite/60 mt-0.5">
+                    Ideal para cancelamento de contratos/assinaturas a partir deste mês. Mantém as parcelas passadas no histórico contábil.
+                  </p>
+                </div>
+              </button>
+
+              {/* Opção 3: Todas as parcelas da série */}
+              <button
+                type="button"
+                disabled={isDeletingPayable}
+                onClick={() => executeRecurringDelete("ALL")}
+                className="w-full p-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 hover:border-red-400 rounded-xl text-left transition flex items-start space-x-3 group cursor-pointer disabled:opacity-50"
+              >
+                <div className="p-2 rounded-lg bg-red-500/20 text-red-400 shrink-0 mt-0.5">
+                  <Trash2 size={16} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-red-300 group-hover:text-red-200">
+                      3. Excluir TODAS as {deleteRecurringSeries.length} parcelas da série
+                    </span>
+                    <span className="text-[10px] text-red-400 font-mono font-bold">
+                      {deleteRecurringSeries.length} parcelas
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-red-300/70 mt-0.5">
+                    Apaga completamente todas as parcelas (passadas, atual e futuras) vinculadas a esta programação.
+                  </p>
+                </div>
+              </button>
+
+              {/* Opção 4: Apenas as não pagas/pendentes (se houver alguma paga) */}
+              {deleteRecurringSeries.some((p) => p.status === "PAID") && (
+                <button
+                  type="button"
+                  disabled={isDeletingPayable}
+                  onClick={() => executeRecurringDelete("ONLY_PENDING")}
+                  className="w-full p-3 bg-brand-black/50 hover:bg-brand-black border border-brand-blue/30 hover:border-amber-400/60 rounded-xl text-left transition flex items-start space-x-3 group cursor-pointer disabled:opacity-50"
+                >
+                  <div className="p-2 rounded-lg bg-blue-500/20 text-blue-400 shrink-0 mt-0.5">
+                    <Clock size={16} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-brand-offwhite group-hover:text-amber-300">
+                        4. Excluir apenas parcelas PENDENTES (Preservar pagas)
+                      </span>
+                      <span className="text-[10px] text-blue-400 font-mono font-bold">
+                        {deleteRecurringSeries.filter((p) => p.status !== "PAID").length} parcelas
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-brand-offwhite/60 mt-0.5">
+                      Remove apenas os lançamentos em aberto, preservando os comprovantes de parcelas já quitadas.
+                    </p>
+                  </div>
+                </button>
+              )}
+            </div>
+
+            {/* Rodapé / Cancelar */}
+            <div className="flex items-center justify-end pt-3 border-t border-brand-blue/20">
+              <button
+                type="button"
+                disabled={isDeletingPayable}
+                onClick={() => {
+                  setIsDeleteRecurringModalOpen(false);
+                  setPayableToDelete(null);
+                  setDeleteRecurringSeries([]);
+                }}
+                className="px-4 py-2 text-xs font-bold text-brand-offwhite/70 hover:text-brand-offwhite transition cursor-pointer"
+              >
+                Cancelar Operação
+              </button>
+            </div>
           </div>
         </div>
       )}
