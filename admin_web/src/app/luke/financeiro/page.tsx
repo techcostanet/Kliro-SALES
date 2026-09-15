@@ -42,6 +42,23 @@ import {
   formatNumberBR,
 } from "@/lib/formatters";
 import CurrencyInput from "@/components/CurrencyInput";
+import ToastFeedback, { ToastMessage } from "@/components/ToastFeedback";
+
+// Helper recursivo para garantir que nenhum campo 'undefined' seja enviado ao Firestore
+function cleanFirestoreData(data: Record<string, any>): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined) {
+      continue;
+    }
+    if (value !== null && typeof value === "object" && !Array.isArray(value) && !(value instanceof Date)) {
+      result[key] = cleanFirestoreData(value);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
 
 export interface PayableItem {
   id: string;
@@ -412,7 +429,7 @@ const MONTHS_LIST = [
   { value: "12", label: "Dezembro (12)" },
 ];
 
-const YEARS_LIST = ["2024", "2025", "2026", "2027"];
+const YEARS_LIST = ["2024", "2025", "2026", "2027", "2028"];
 
 export default function LukeFinanceiroPage() {
   const { hideValues, togglePrivacy, formatValue } = usePrivacy();
@@ -421,11 +438,17 @@ export default function LukeFinanceiroPage() {
   const [receivables, setReceivables] = useState<ReceivableItem[]>([]);
   const [categories, setCategories] = useState<FinancialCategory[]>(initialCategories as FinancialCategory[]);
   const [loadingFirestore, setLoadingFirestore] = useState(false);
-  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
 
-  // Filtros Globais / Por Aba
-  const [selectedMonth, setSelectedMonth] = useState("08");
-  const [selectedYear, setSelectedYear] = useState("2026");
+  const tenantId = "tenant_luke_001";
+  const now = new Date();
+  const curMonthStr = String(now.getMonth() + 1).padStart(2, "0");
+  const curYearStr = String(now.getFullYear());
+  const todayStr = now.toISOString().split("T")[0];
+
+  // Filtros Globais / Por Aba (Iniciam no mês corrente real)
+  const [selectedMonth, setSelectedMonth] = useState(curMonthStr);
+  const [selectedYear, setSelectedYear] = useState(curYearStr);
   const [periodPreset, setPeriodPreset] = useState<"CURRENT" | "PREVIOUS" | "NEXT" | "YEAR" | "ALL">("CURRENT");
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -443,7 +466,7 @@ export default function LukeFinanceiroPage() {
   const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false);
   const [selectedReceivable, setSelectedReceivable] = useState<ReceivableItem | null>(null);
   const [receivePaymentMethod, setReceivePaymentMethod] = useState<"PIX" | "CASH" | "CARD" | "BOLETO">("PIX");
-  const [receiveDate, setReceiveDate] = useState(new Date().toISOString().split("T")[0]);
+  const [receiveDate, setReceiveDate] = useState(todayStr);
 
   // Modal de Categorias
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -480,11 +503,11 @@ export default function LukeFinanceiroPage() {
     categoryId: "CAT-001",
     supplier: "",
     amount: 100,
-    dueDate: new Date().toISOString().split("T")[0],
-    competence: "08/2026",
+    dueDate: todayStr,
+    competence: `${curMonthStr}/${curYearStr}`,
     notes: "",
     isAlreadyPaid: false,
-    paymentDate: new Date().toISOString().split("T")[0],
+    paymentDate: todayStr,
     paymentMethod: "PIX",
     recurrence: false,
     recurrenceMonths: 12,
@@ -508,8 +531,8 @@ export default function LukeFinanceiroPage() {
     routeId: "R1",
     vendorName: "LUKE Distribuidora",
     amount: 0,
-    saleDate: new Date().toISOString().split("T")[0],
-    scheduledDate: new Date().toISOString().split("T")[0],
+    saleDate: todayStr,
+    scheduledDate: todayStr,
     paymentMethod: "PA",
     status: "PENDING",
     notes: "",
@@ -517,9 +540,6 @@ export default function LukeFinanceiroPage() {
 
   // Pesquisa Digital de Categorias
   const [categorySearch, setCategorySearch] = useState("");
-
-  const tenantId = "tenant_luke_001";
-  const todayStr = new Date().toISOString().split("T")[0];
 
   // Helper para verificar se conta está vencida
   const isItemOverdue = (item: { status: string; dueDate?: string; scheduledDate?: string }) => {
@@ -632,7 +652,7 @@ export default function LukeFinanceiroPage() {
         supplier: item.supplier || "",
         amount: item.amount || 0,
         dueDate: item.dueDate || todayStr,
-        competence: item.competence || `${selectedMonth}/${selectedYear}`,
+        competence: item.competence || `${curMonthStr}/${curYearStr}`,
         notes: item.notes || "",
         isAlreadyPaid: item.status === "PAID",
         paymentDate: item.paymentDate || todayStr,
@@ -648,7 +668,7 @@ export default function LukeFinanceiroPage() {
         supplier: "",
         amount: 100,
         dueDate: todayStr,
-        competence: `${selectedMonth}/${selectedYear}`,
+        competence: `${curMonthStr}/${curYearStr}`,
         notes: "",
         isAlreadyPaid: false,
         paymentDate: todayStr,
@@ -670,11 +690,20 @@ export default function LukeFinanceiroPage() {
     try {
       await deleteDoc(doc(db, `tenants/${tenantId}/payables`, item.id));
       setPayables((prev) => prev.filter((p) => p.id !== item.id));
-      setSyncMessage(`✅ Despesa "${item.description}" excluída do banco com sucesso.`);
-      setTimeout(() => setSyncMessage(null), 4000);
+      setToast({
+        type: "cloud_success",
+        title: "Despesa Removida da Nuvem!",
+        message: `Lançamento "${item.description}" excluído com sucesso do Firestore.`,
+        isCloud: true,
+      });
     } catch (err: any) {
       console.error("Erro ao excluir despesa:", err);
-      setSyncMessage(`❌ Erro ao excluir despesa: ${err?.message}`);
+      setToast({
+        type: "cloud_error",
+        title: "Erro ao Excluir da Nuvem",
+        message: err?.message || "Não foi possível remover a despesa.",
+        isCloud: true,
+      });
     }
   };
 
@@ -685,7 +714,7 @@ export default function LukeFinanceiroPage() {
 
     const catObj = categories.find((c) => c.id === payableForm.categoryId);
     const baseDueDate = payableForm.dueDate || todayStr;
-    const isPaid = payableForm.isAlreadyPaid;
+    const isPaid = Boolean(payableForm.isAlreadyPaid);
 
     if (editingPayable) {
       setIsSavingPayable(true);
@@ -698,27 +727,44 @@ export default function LukeFinanceiroPage() {
           supplier: payableForm.supplier?.trim() || "Diversos",
           amount: Number(payableForm.amount || 0),
           dueDate: baseDueDate,
-          competence: payableForm.competence || editingPayable.competence,
-          notes: payableForm.notes || "",
+          competence: payableForm.competence?.trim() || editingPayable.competence || `${curMonthStr}/${curYearStr}`,
+          notes: payableForm.notes?.trim() || "",
           status: isPaid ? "PAID" : baseDueDate < todayStr ? "OVERDUE" : "PENDING",
-          paymentDate: isPaid ? payableForm.paymentDate : undefined,
-          paymentMethod: isPaid ? payableForm.paymentMethod : undefined,
         };
 
-        await setDoc(doc(db, `tenants/${tenantId}/payables`, editingPayable.id), {
+        if (isPaid) {
+          updatedItem.paymentDate = payableForm.paymentDate?.trim() || todayStr;
+          updatedItem.paymentMethod = payableForm.paymentMethod || "PIX";
+        } else {
+          delete updatedItem.paymentDate;
+          delete updatedItem.paymentMethod;
+        }
+
+        const firestoreData = cleanFirestoreData({
           ...updatedItem,
           updatedAt: new Date().toISOString(),
-        }, { merge: true });
+        });
 
-        setPayables((prev) => prev.map((p) => p.id === editingPayable.id ? updatedItem : p));
-        setSyncMessage(`✅ Despesa "${updatedItem.description}" atualizada com sucesso!`);
-        setTimeout(() => setSyncMessage(null), 4000);
+        await setDoc(doc(db, `tenants/${tenantId}/payables`, editingPayable.id), firestoreData, { merge: true });
+
+        setPayables((prev) => prev.map((p) => (p.id === editingPayable.id ? updatedItem : p)));
+        setToast({
+          type: "cloud_success",
+          title: "Despesa Atualizada na Nuvem!",
+          message: `Despesa "${updatedItem.description}" sincronizada no Firestore.`,
+          isCloud: true,
+        });
 
         setIsPayableModalOpen(false);
         setEditingPayable(null);
       } catch (err: any) {
         console.error("Erro ao atualizar despesa:", err);
-        setSyncMessage(`❌ Erro ao atualizar despesa: ${err?.message || "Erro de conexão"}`);
+        setToast({
+          type: "cloud_error",
+          title: "Erro ao Atualizar na Nuvem",
+          message: err?.message || "Não foi possível sincronizar com o Firestore.",
+          isCloud: true,
+        });
       } finally {
         setIsSavingPayable(false);
       }
@@ -728,22 +774,28 @@ export default function LukeFinanceiroPage() {
     const itemsToCreate: PayableItem[] = [];
 
     if (payableForm.recurrence && payableForm.recurrenceMonths > 1) {
-      // Cria as parcelas recorrentes
+      // Cria as parcelas recorrentes para TODOS os meses selecionados (ex: 2, 3, 6, 12, 24, 36)
       const totalMonths = Math.min(Math.max(payableForm.recurrenceMonths, 2), 36);
       const [initY, initM, initD] = baseDueDate.split("-").map(Number);
 
       for (let i = 0; i < totalMonths; i++) {
-        const monthDate = new Date(initY, initM - 1 + i, initD || 1);
-        const yStr = monthDate.getFullYear();
-        const mStr = String(monthDate.getMonth() + 1).padStart(2, "0");
-        const dStr = String(monthDate.getDate()).padStart(2, "0");
+        // Cálculo aritmético preciso de mês e ano para evitar overflow de dia em meses curtos
+        const totalZeroBasedMonths = (initM - 1) + i;
+        const targetYear = initY + Math.floor(totalZeroBasedMonths / 12);
+        const targetMonth = (totalZeroBasedMonths % 12) + 1; // 1 a 12
+        const daysInTargetMonth = new Date(targetYear, targetMonth, 0).getDate();
+        const targetDay = Math.min(initD || 1, daysInTargetMonth);
+
+        const yStr = String(targetYear);
+        const mStr = String(targetMonth).padStart(2, "0");
+        const dStr = String(targetDay).padStart(2, "0");
         const compStr = `${mStr}/${yStr}`;
         const itemDue = `${yStr}-${mStr}-${dStr}`;
 
         const isFirstPaid = i === 0 && isPaid;
 
-        itemsToCreate.push({
-          id: `pay-${Date.now()}-${i + 1}`,
+        const newItem: PayableItem = {
+          id: `pay-${Date.now()}-${i + 1}-${Math.random().toString(36).substring(2, 6)}`,
           description: `${payableForm.description.trim()} (${i + 1}/${totalMonths})`,
           categoryId: payableForm.categoryId || "CAT-001",
           categoryName: catObj?.name || "Despesa Operacional",
@@ -752,43 +804,87 @@ export default function LukeFinanceiroPage() {
           dueDate: itemDue,
           competence: compStr,
           status: isFirstPaid ? "PAID" : itemDue < todayStr ? "OVERDUE" : "PENDING",
-          paymentDate: isFirstPaid ? payableForm.paymentDate : undefined,
-          paymentMethod: isFirstPaid ? payableForm.paymentMethod : undefined,
           recurrence: true,
           recurrenceMonths: totalMonths,
-          notes: payableForm.notes || "",
-        });
+          notes: payableForm.notes?.trim() || "",
+        };
+
+        if (isFirstPaid) {
+          newItem.paymentDate = payableForm.paymentDate?.trim() || todayStr;
+          newItem.paymentMethod = payableForm.paymentMethod || "PIX";
+        }
+
+        itemsToCreate.push(newItem);
       }
     } else {
       // Conta Única
-      itemsToCreate.push({
-        id: `pay-${Date.now()}`,
+      const newItem: PayableItem = {
+        id: `pay-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         description: payableForm.description.trim(),
         categoryId: payableForm.categoryId || "CAT-001",
         categoryName: catObj?.name || "Despesa Operacional",
         supplier: payableForm.supplier?.trim() || "Diversos",
         amount: Number(payableForm.amount || 0),
         dueDate: baseDueDate,
-        competence: payableForm.competence || `${selectedMonth}/${selectedYear}`,
+        competence: payableForm.competence?.trim() || `${curMonthStr}/${curYearStr}`,
         status: isPaid ? "PAID" : baseDueDate < todayStr ? "OVERDUE" : "PENDING",
-        paymentDate: isPaid ? payableForm.paymentDate : undefined,
-        paymentMethod: isPaid ? payableForm.paymentMethod : undefined,
         recurrence: false,
-        notes: payableForm.notes || "",
-      });
+        notes: payableForm.notes?.trim() || "",
+      };
+
+      if (isPaid) {
+        newItem.paymentDate = payableForm.paymentDate?.trim() || todayStr;
+        newItem.paymentMethod = payableForm.paymentMethod || "PIX";
+      }
+
+      itemsToCreate.push(newItem);
     }
 
     setIsSavingPayable(true);
     try {
+      // Gravação atômica em lote com writeBatch para garantir que todas as parcelas sejam salvas
+      const batch = writeBatch(db);
       for (const item of itemsToCreate) {
-        await setDoc(doc(db, `tenants/${tenantId}/payables`, item.id), {
+        const docRef = doc(db, `tenants/${tenantId}/payables`, item.id);
+        const dataToSave = cleanFirestoreData({
           ...item,
           createdAt: new Date().toISOString(),
         });
+        batch.set(docRef, dataToSave);
       }
+      await batch.commit();
+
       setPayables((prev) => [...itemsToCreate, ...prev]);
-      setSyncMessage(`✅ ${itemsToCreate.length} lançamento(s) de despesa gravado(s) na nuvem Firestore!`);
-      setTimeout(() => setSyncMessage(null), 4000);
+
+      // Feedback Visual de Nuvem (Toast)
+      if (itemsToCreate.length > 1) {
+        setToast({
+          type: "cloud_success",
+          title: `${itemsToCreate.length} Parcelas Gravadas na Nuvem!`,
+          message: `Despesa recorrente criada para todos os ${itemsToCreate.length} meses (de ${itemsToCreate[0].competence} até ${itemsToCreate[itemsToCreate.length - 1].competence}). Alterne os meses no filtro do topo ou selecione "Todos" para visualizar todas as parcelas.`,
+          isCloud: true,
+        });
+      } else {
+        setToast({
+          type: "cloud_success",
+          title: isPaid ? "Despesa Paga Gravada na Nuvem!" : "Despesa Cadastrada na Nuvem!",
+          message: `Lançamento "${payableForm.description.trim()}" (${formatValue(payableForm.amount, "currency")}) gravado e sincronizado no Firestore.`,
+          isCloud: true,
+        });
+      }
+
+      // Se a competência criada for de outro mês, ajustar o filtro para exibir de imediato
+      const firstComp = itemsToCreate[0].competence;
+      const [fMonth, fYear] = firstComp.split("/");
+      if (selectedMonth !== "ALL" && selectedMonth !== fMonth) {
+        setSelectedMonth(fMonth);
+      }
+      if (selectedYear !== "ALL" && selectedYear !== fYear) {
+        setSelectedYear(fYear);
+      }
+      if (isPaid && statusFilter === "PENDING") {
+        setStatusFilter("ALL");
+      }
 
       setIsPayableModalOpen(false);
       setPayableForm({
@@ -797,7 +893,7 @@ export default function LukeFinanceiroPage() {
         supplier: "",
         amount: 100,
         dueDate: todayStr,
-        competence: `${selectedMonth}/${selectedYear}`,
+        competence: `${curMonthStr}/${curYearStr}`,
         notes: "",
         isAlreadyPaid: false,
         paymentDate: todayStr,
@@ -808,7 +904,12 @@ export default function LukeFinanceiroPage() {
       setCategorySearch("");
     } catch (err: any) {
       console.error("Erro ao salvar despesas no Firestore:", err);
-      setSyncMessage(`❌ Erro ao salvar despesa na nuvem: ${err?.message || "Erro de conexão"}`);
+      setToast({
+        type: "cloud_error",
+        title: "Falha ao Gravar na Nuvem",
+        message: err?.message || "Não foi possível sincronizar o lançamento com o Firestore.",
+        isCloud: true,
+      });
     } finally {
       setIsSavingPayable(false);
     }
@@ -869,16 +970,23 @@ export default function LukeFinanceiroPage() {
           notes: receivableForm.notes || "",
         };
 
-        await setDoc(doc(db, `tenants/${tenantId}/receivables`, editingReceivable.id), {
+        const firestoreData = cleanFirestoreData({
           ...updatedItem,
           updatedAt: new Date().toISOString(),
-        }, { merge: true });
+        });
 
-        setReceivables((prev) => prev.map((r) => r.id === editingReceivable.id ? updatedItem : r));
-        setSyncMessage(`✅ Título a receber de "${updatedItem.clientName}" atualizado com sucesso!`);
+        await setDoc(doc(db, `tenants/${tenantId}/receivables`, editingReceivable.id), firestoreData, { merge: true });
+
+        setReceivables((prev) => prev.map((r) => (r.id === editingReceivable.id ? updatedItem : r)));
+        setToast({
+          type: "cloud_success",
+          title: "Título Atualizado na Nuvem!",
+          message: `Título de "${updatedItem.clientName}" atualizado com sucesso no Firestore.`,
+          isCloud: true,
+        });
       } else {
         const newItem: ReceivableItem = {
-          id: `rec-${Date.now()}`,
+          id: `rec-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
           clientName: receivableForm.clientName.trim(),
           buyerName: receivableForm.buyerName.trim(),
           routeId: receivableForm.routeId || "R1",
@@ -891,20 +999,31 @@ export default function LukeFinanceiroPage() {
           notes: receivableForm.notes || "",
         };
 
-        await setDoc(doc(db, `tenants/${tenantId}/receivables`, newItem.id), {
+        const firestoreData = cleanFirestoreData({
           ...newItem,
           createdAt: new Date().toISOString(),
         });
 
+        await setDoc(doc(db, `tenants/${tenantId}/receivables`, newItem.id), firestoreData);
+
         setReceivables((prev) => [newItem, ...prev]);
-        setSyncMessage(`✅ Título a receber de "${newItem.clientName}" lançado na nuvem!`);
+        setToast({
+          type: "cloud_success",
+          title: "Título Lançado na Nuvem!",
+          message: `Título a receber de "${newItem.clientName}" (${formatValue(newItem.amount, "currency")}) salvo no Firestore.`,
+          isCloud: true,
+        });
       }
-      setTimeout(() => setSyncMessage(null), 4000);
       setIsReceivableModalOpen(false);
       setEditingReceivable(null);
     } catch (err: any) {
       console.error("Erro ao salvar conta a receber:", err);
-      setSyncMessage(`❌ Erro ao salvar título: ${err?.message}`);
+      setToast({
+        type: "cloud_error",
+        title: "Erro ao Salvar Título",
+        message: err?.message || "Não foi possível gravar no Firestore.",
+        isCloud: true,
+      });
     } finally {
       setIsSavingReceivable(false);
     }
@@ -918,11 +1037,20 @@ export default function LukeFinanceiroPage() {
     try {
       await deleteDoc(doc(db, `tenants/${tenantId}/receivables`, item.id));
       setReceivables((prev) => prev.filter((p) => p.id !== item.id));
-      setSyncMessage(`✅ Título a receber de "${item.clientName}" excluído do banco.`);
-      setTimeout(() => setSyncMessage(null), 4000);
+      setToast({
+        type: "cloud_success",
+        title: "Título Excluído da Nuvem!",
+        message: `Título de "${item.clientName}" removido do Firestore.`,
+        isCloud: true,
+      });
     } catch (err: any) {
       console.error("Erro ao excluir conta a receber:", err);
-      setSyncMessage(`❌ Erro ao excluir título: ${err?.message}`);
+      setToast({
+        type: "cloud_error",
+        title: "Erro ao Excluir Título",
+        message: err?.message || "Não foi possível remover o título.",
+        isCloud: true,
+      });
     }
   };
 
@@ -952,9 +1080,15 @@ export default function LukeFinanceiroPage() {
           updatedAt: new Date().toISOString(),
         };
 
-        await setDoc(doc(db, `tenants/${tenantId}/categories`, editingCategory.id), updatedCat, { merge: true });
-        setCategories((prev) => prev.map((c) => c.id === editingCategory.id ? updatedCat : c));
-        setSyncMessage(`✅ Categoria "${updatedCat.name}" atualizada com sucesso!`);
+        const firestoreData = cleanFirestoreData(updatedCat);
+        await setDoc(doc(db, `tenants/${tenantId}/categories`, editingCategory.id), firestoreData, { merge: true });
+        setCategories((prev) => prev.map((c) => (c.id === editingCategory.id ? updatedCat : c)));
+        setToast({
+          type: "cloud_success",
+          title: "Categoria Atualizada na Nuvem!",
+          message: `Categoria "${updatedCat.name}" atualizada com sucesso no Firestore.`,
+          isCloud: true,
+        });
       } else {
         const nextNum = categories.length + 1;
         const newCatId = `CAT-${String(nextNum).padStart(3, "0")}`;
@@ -966,16 +1100,26 @@ export default function LukeFinanceiroPage() {
           createdAt: new Date().toISOString(),
         };
 
-        await setDoc(doc(db, `tenants/${tenantId}/categories`, newCatId), newCat);
+        const firestoreData = cleanFirestoreData(newCat);
+        await setDoc(doc(db, `tenants/${tenantId}/categories`, newCatId), firestoreData);
         setCategories((prev) => [...prev, newCat]);
-        setSyncMessage(`✅ Categoria "${newCat.name}" criada com sucesso!`);
+        setToast({
+          type: "cloud_success",
+          title: "Categoria Criada na Nuvem!",
+          message: `Categoria "${newCat.name}" (${newCat.type === "INCOME" ? "Receita" : "Despesa"}) gravada no Firestore.`,
+          isCloud: true,
+        });
       }
-      setTimeout(() => setSyncMessage(null), 4000);
       setIsCategoryModalOpen(false);
       setEditingCategory(null);
     } catch (err: any) {
       console.error("Erro ao salvar categoria:", err);
-      setSyncMessage(`❌ Erro ao salvar categoria: ${err?.message}`);
+      setToast({
+        type: "cloud_error",
+        title: "Erro ao Salvar Categoria",
+        message: err?.message || "Não foi possível gravar a categoria.",
+        isCloud: true,
+      });
     } finally {
       setIsSavingCategory(false);
     }
@@ -989,11 +1133,20 @@ export default function LukeFinanceiroPage() {
     try {
       await deleteDoc(doc(db, `tenants/${tenantId}/categories`, cat.id));
       setCategories((prev) => prev.filter((c) => c.id !== cat.id));
-      setSyncMessage(`✅ Categoria "${cat.name}" excluída com sucesso.`);
-      setTimeout(() => setSyncMessage(null), 4000);
+      setToast({
+        type: "cloud_success",
+        title: "Categoria Removida da Nuvem!",
+        message: `Categoria "${cat.name}" excluída com sucesso do Firestore.`,
+        isCloud: true,
+      });
     } catch (err: any) {
       console.error("Erro ao excluir categoria:", err);
-      setSyncMessage(`❌ Erro ao excluir categoria: ${err?.message}`);
+      setToast({
+        type: "cloud_error",
+        title: "Erro ao Excluir Categoria",
+        message: err?.message || "Não foi possível excluir a categoria.",
+        isCloud: true,
+      });
     }
   };
 
@@ -1009,15 +1162,29 @@ export default function LukeFinanceiroPage() {
     try {
       await setDoc(
         doc(db, `tenants/${tenantId}/payables`, item.id),
-        { status: "PAID", paymentDate: todayStr, paymentMethod: "PIX", updatedAt: new Date().toISOString() },
+        cleanFirestoreData({
+          status: "PAID",
+          paymentDate: todayStr,
+          paymentMethod: "PIX",
+          updatedAt: new Date().toISOString(),
+        }),
         { merge: true }
       );
       setPayables((prev) => prev.map((p) => (p.id === item.id ? updated : p)));
-      setSyncMessage(`✅ Pagamento de ${formatValue(item.amount)} confirmado!`);
-      setTimeout(() => setSyncMessage(null), 4000);
+      setToast({
+        type: "cloud_success",
+        title: "Pagamento Confirmado na Nuvem!",
+        message: `Despesa "${item.description}" (${formatValue(item.amount, "currency")}) baixada no Firestore.`,
+        isCloud: true,
+      });
     } catch (err: any) {
       console.error("Erro ao dar baixa em despesa no Firestore:", err);
-      setSyncMessage(`❌ Erro ao registrar pagamento: ${err?.message || "Erro de conexão"}`);
+      setToast({
+        type: "cloud_error",
+        title: "Erro ao Registrar Pagamento",
+        message: err?.message || "Não foi possível atualizar o pagamento no Firestore.",
+        isCloud: true,
+      });
     }
   };
 
@@ -1044,17 +1211,17 @@ export default function LukeFinanceiroPage() {
     try {
       await setDoc(
         doc(db, `tenants/${tenantId}/receivables`, selectedReceivable.id),
-        {
+        cleanFirestoreData({
           status: "RECEIVED",
           receivedDate: receiveDate,
           paymentMethod: receivePaymentMethod,
           updatedAt: new Date().toISOString(),
-        },
+        }),
         { merge: true }
       );
 
       const txId = `tx-pa-${Date.now()}`;
-      await setDoc(doc(db, `tenants/${tenantId}/transactions`, txId), {
+      await setDoc(doc(db, `tenants/${tenantId}/transactions`, txId), cleanFirestoreData({
         id: txId,
         clientName: selectedReceivable.clientName,
         vendorName: selectedReceivable.vendorName,
@@ -1065,16 +1232,25 @@ export default function LukeFinanceiroPage() {
         source: "RECEBIMENTO_PA",
         originReceivableId: selectedReceivable.id,
         createdAt: new Date().toISOString(),
-      });
+      }));
 
       setReceivables((prev) =>
         prev.map((r) => (r.id === selectedReceivable.id ? updated : r))
       );
-      setSyncMessage(`✅ Recebimento de ${formatValue(updated.amount)} registrado e lançado no Caixa!`);
-      setTimeout(() => setSyncMessage(null), 4000);
+      setToast({
+        type: "cloud_success",
+        title: "Recebimento Confirmado na Nuvem!",
+        message: `Recebimento de ${formatValue(updated.amount, "currency")} registrado e lançado no Caixa!`,
+        isCloud: true,
+      });
     } catch (err: any) {
       console.error("Erro ao registrar recebimento no Firestore:", err);
-      setSyncMessage(`❌ Erro ao registrar recebimento: ${err?.message || "Erro de conexão"}`);
+      setToast({
+        type: "cloud_error",
+        title: "Erro ao Registrar Recebimento",
+        message: err?.message || "Não foi possível salvar na nuvem.",
+        isCloud: true,
+      });
     }
 
     setIsReceiveModalOpen(false);
@@ -1107,30 +1283,47 @@ export default function LukeFinanceiroPage() {
         const updated: PayableItem = {
           ...p,
           status: p.dueDate < todayStr ? "OVERDUE" : "PENDING",
-          paymentDate: undefined,
-          paymentMethod: undefined,
           auditTrail: [...(p.auditTrail || []), auditEntry],
         };
-        await setDoc(doc(db, `tenants/${tenantId}/payables`, p.id), updated, { merge: true });
+        delete updated.paymentDate;
+        delete updated.paymentMethod;
+
+        await setDoc(doc(db, `tenants/${tenantId}/payables`, p.id), cleanFirestoreData({
+          ...updated,
+          updatedAt: new Date().toISOString(),
+        }), { merge: true });
         setPayables((prev) => prev.map((item) => (item.id === p.id ? updated : item)));
       } else {
         const r = reversalTarget.item as ReceivableItem;
         const updated: ReceivableItem = {
           ...r,
           status: r.scheduledDate < todayStr ? "OVERDUE" : "PENDING",
-          receivedDate: undefined,
           paymentMethod: "PA",
           auditTrail: [...(r.auditTrail || []), auditEntry],
         };
-        await setDoc(doc(db, `tenants/${tenantId}/receivables`, r.id), updated, { merge: true });
+        delete updated.receivedDate;
+
+        await setDoc(doc(db, `tenants/${tenantId}/receivables`, r.id), cleanFirestoreData({
+          ...updated,
+          updatedAt: new Date().toISOString(),
+        }), { merge: true });
         setReceivables((prev) => prev.map((item) => (item.id === r.id ? updated : item)));
       }
 
-      setSyncMessage("🔄 Baixa estornada com sucesso e registrada na auditoria!");
-      setTimeout(() => setSyncMessage(null), 4000);
+      setToast({
+        type: "cloud_success",
+        title: "Estorno Concluído na Nuvem!",
+        message: "Baixa estornada com sucesso e registrada na trilha de auditoria!",
+        isCloud: true,
+      });
     } catch (err: any) {
       console.error("Erro ao estornar no Firestore:", err);
-      setSyncMessage(`❌ Erro ao processar estorno: ${err?.message || "Erro de conexão"}`);
+      setToast({
+        type: "cloud_error",
+        title: "Erro ao Processar Estorno",
+        message: err?.message || "Não foi possível processar o estorno.",
+        isCloud: true,
+      });
     }
 
     setIsReversalModalOpen(false);
@@ -1253,6 +1446,9 @@ export default function LukeFinanceiroPage() {
 
   return (
     <div className="space-y-8">
+      {/* Toast Feedback Notification Flutuante (Nuvem Firestore) */}
+      <ToastFeedback toast={toast} onClose={() => setToast(null)} />
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -1313,14 +1509,6 @@ export default function LukeFinanceiroPage() {
           )}
         </div>
       </div>
-
-      {/* Sync Alert */}
-      {syncMessage && (
-        <div className="p-4 rounded-xl bg-brand-graphite border border-brand-gold/50 text-sm text-brand-offwhite flex items-center space-x-3 shadow-lg">
-          <CheckCircle2 className="text-brand-gold shrink-0" size={20} />
-          <span>{syncMessage}</span>
-        </div>
-      )}
 
       {/* BARRA DE FILTRO TEMPORAL (MÊS / ANO / PERÍODO) */}
       <div className="bg-brand-graphite p-4 rounded-2xl border border-brand-blue/30 shadow-md flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
@@ -2199,7 +2387,16 @@ export default function LukeFinanceiroPage() {
                     type="date"
                     required
                     value={payableForm.dueDate}
-                    onChange={(e) => setPayableForm({ ...payableForm, dueDate: e.target.value })}
+                    onChange={(e) => {
+                      const newDue = e.target.value;
+                      const parts = newDue ? newDue.split("-") : [];
+                      const autoComp = parts.length === 3 ? `${parts[1]}/${parts[0]}` : payableForm.competence;
+                      setPayableForm({
+                        ...payableForm,
+                        dueDate: newDue,
+                        competence: autoComp,
+                      });
+                    }}
                     className="w-full px-3 py-2 bg-brand-black border border-brand-blue/40 rounded-lg text-sm text-brand-offwhite focus:outline-none focus:border-brand-gold font-mono"
                   />
                 </div>

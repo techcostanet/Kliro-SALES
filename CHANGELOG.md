@@ -4,6 +4,25 @@ Todas as melhorias, novidades e correções notáveis deste projeto serão docum
 
 ## [Unreleased]
 
+## [1.12.1] - 2026-09-15
+### Fixed
+- **Correção no Salvamento de Despesas Pagas no Ato (`/luke/financeiro`)**:
+  - Tratamento de serialização profunda no Firestore via `cleanFirestoreData` para impedir que campos `paymentDate` ou `paymentMethod` com valores `undefined` quebrem a chamada `setDoc`.
+  - Atribuição automática de status `PAID`, data de liquidação e método de pagamento quando a opção "Esta despesa já foi paga / quitada no ato?" estiver marcada.
+- **Correção e Gravação Atômica de Despesas Recorrentes (`/luke/financeiro`)**:
+  - Substituição do loop sequencial por `writeBatch(db)` do Firestore, gravando simultaneamente todas as parcelas (2, 3, 6, 12, 24 ou 36 meses).
+  - Algoritmo seguro de progressão mensal que evita o clássico problema de overflow do JavaScript `Date` em dias 29, 30 ou 31.
+  - Parcela inicial marcada como `PAID` (caso o usuário marque como quitada no ato) e parcelas subsequentes programadas como `PENDING`, garantindo que todas as parcelas sejam salvas no Firestore.
+- **Ajuste Dinâmico de Filtro Temporal & Competência**:
+  - O seletor de mês e ano agora é inicializado dinamicamente com o mês e ano correntes reais, evitando ocultação de novos lançamentos em telas configuradas para meses anteriores.
+  - Sincronização em tempo real entre o campo de Vencimento (`dueDate`) e a Competência (`competence`), garantindo consistência contábil.
+  - Ao salvar uma nova despesa ou parcelas recorrentes, o filtro temporal da tela ajusta-se automaticamente para o mês de origem do lançamento, garantindo visualização imediata pelo gestor.
+
+### Added
+- **Notificação Visual Flutuante de Confirmação na Nuvem (`ToastFeedback`)**:
+  - Integração do componente de toast flutuante com badge animado de sincronização do Firestore (`isCloud: true`, indicador verde pulsante) idêntico ao catálogo de produtos.
+  - Alertas em tempo real para cadastro de despesas simples, parcelamento recorrente com resumo de competências, edição, exclusão, liquidação (baixa) e recebimento de títulos.
+
 ## [1.12.0] - 2026-09-15
 ### Added
 - **Upload de Imagem de Produtos Direto do Computador (`/luke/produtos`)**:
